@@ -62,7 +62,23 @@ public final class OverlayController: NSObject, NSWindowDelegate {
             show()
         } else {
             hide()
+            // Turning the overlay off is a statement that it is not wanted, not that it
+            // is briefly out of the way, so its view tree goes too: an ordered-out window
+            // is still on AppKit's window list and holds all 4.7 MB of dirty heap
+            // (`footprint`, MALLOC_SMALL, this machine) that building it cost.
+            releaseWindow()
         }
+    }
+
+    private func releaseWindow() {
+        guard let panel else { return }
+        self.panel = nil
+        trackingArea = nil
+        anchorEdges = nil
+        panel.interaction = nil
+        panel.delegate = nil
+        panel.close()
+        WindowLog.log("overlay window released")
     }
 
     public func show() {

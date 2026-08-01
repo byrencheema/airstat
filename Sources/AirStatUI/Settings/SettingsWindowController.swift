@@ -4,7 +4,7 @@ import AirStatKit
 
 /// Standard document-less preferences window.
 @MainActor
-public final class SettingsWindowController {
+public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
@@ -13,6 +13,7 @@ public final class SettingsWindowController {
     public init(engine: MetricsEngine, settings: SettingsStore) {
         self.engine = engine
         self.settings = settings
+        super.init()
     }
 
     public func show() {
@@ -30,15 +31,31 @@ public final class SettingsWindowController {
         window.center()
     }
 
+    /// Eight panes of forms, chart galleries and colour wells cost 12.6 MB of dirty,
+    /// non-reclaimable heap (`footprint`, MALLOC_SMALL, this machine) once they have
+    /// been built. Settings is opened rarely and closed for the rest of the session, so
+    /// keeping that resident until quit is the worst of both worlds — the window is
+    /// discarded on close and rebuilt on the next `show`.
+    public func windowWillClose(_ notification: Notification) {
+        window = nil
+    }
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow()
         let root = SettingsRootView(settings: settings, engine: engine) { [weak window] tab in
             window?.title = tab.label
         }
+        window.delegate = self
         window.contentViewController = NSHostingController(rootView: root)
         window.title = "AirStat Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
+        // The window's own opaque fill would sit in front of the materials the root
+        // view draws, so the translucency would stop at the content edge and the
+        // titlebar would stay a flat grey bar above a window you can see through.
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.setContentSize(SettingsRootView.windowSize)
         window.setFrameAutosaveName("AirStatSettingsWindow")
         return window
@@ -85,7 +102,13 @@ struct SettingsRootView: View {
                 .background(VisualEffect(material: .sidebar))
             pane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
+                // Was an opaque `windowBackgroundColor`. The panel is a translucent
+                // menu surface, and a settings window that is flat grey beside it reads
+                // as a different app's window. `.underWindowBackground` is the material
+                // macOS uses for exactly this — a window's content area that lets the
+                // desktop through — and it sits at the same vibrancy level as the
+                // sidebar next to it, so the two columns stay differentiated.
+                .background(VisualEffect(material: .underWindowBackground))
         }
         .frame(width: windowWidth, height: windowHeight)
         .onAppear { onPaneChange?(tab) }

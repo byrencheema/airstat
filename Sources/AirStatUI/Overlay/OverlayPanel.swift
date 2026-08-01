@@ -35,6 +35,10 @@ final class OverlayPanel: NSPanel {
         hidesOnDeactivate = false
         animationBehavior = .none
         isRestorable = false
+        // The controller reclaims this window with `close()` when the overlay is turned
+        // off, and the default here would have the window release itself as well —
+        // an over-release on a window ARC already owns.
+        isReleasedWhenClosed = false
         // Dragging is handled explicitly rather than by AppKit's window-background
         // drag: AppKit gives no notification when the drag ends, and the drop is
         // exactly where the overlay has to snap to a corner and persist its position.

@@ -35,6 +35,19 @@ public final class PanelController: NSObject, NSWindowDelegate {
     private var presentation: UInt64 = 0
     private var isPositioning = false
 
+    /// Pending release of the hidden panel's view tree. See `scheduleWindowRelease`.
+    private var releaseTask: Task<Void, Never>?
+
+    /// How long a hidden panel keeps its window alive before the view tree is thrown
+    /// away.
+    ///
+    /// The panel's SwiftUI graph costs 9.6 MB of dirty, non-reclaimable heap
+    /// (`footprint`, MALLOC_SMALL, this machine) and an ordered-out window keeps every
+    /// byte of it for the life of the process. Rebuilding costs 27 ms, which is far too
+    /// much to pay on a panel the user opens every few minutes — so the window survives
+    /// bursts of use and is only released once the panel has genuinely been left alone.
+    private static let windowReleaseDelay: Duration = .seconds(120)
+
     public init(engine: MetricsEngine, settings: SettingsStore) {
         self.engine = engine
         self.settings = settings
@@ -58,6 +71,8 @@ public final class PanelController: NSObject, NSWindowDelegate {
     // MARK: Presentation
 
     public func show(anchoredTo anchor: NSRect?, on screen: NSScreen?) {
+        releaseTask?.cancel()
+        releaseTask = nil
         let window = existingOrNewWindow()
         lastAnchor = anchor
         lastScreen = screen ?? anchor.flatMap(Self.screen(containing:))
@@ -104,7 +119,30 @@ public final class PanelController: NSObject, NSWindowDelegate {
                 window.orderOut(nil)
             }
         }
+        scheduleWindowRelease()
         WindowLog.log("panel hidden monitors=\(activeEventMonitorCount)")
+    }
+
+    /// Throw away a long-hidden panel's window, and with it the SwiftUI view tree.
+    ///
+    /// `orderOut` alone reclaims nothing: AppKit keeps every window that has not been
+    /// *closed* in the application's window list, so a panel opened once at breakfast
+    /// still holds its whole view graph at midnight.
+    private func scheduleWindowRelease() {
+        releaseTask?.cancel()
+        releaseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.windowReleaseDelay)
+            guard !Task.isCancelled, let self, !self.isVisible, let window = self.window else { return }
+            self.releaseTask = nil
+            self.window = nil
+            self.lastAnchor = nil
+            self.lastScreen = nil
+            // Dropping the delegate first: `close` notifies it, and this controller has
+            // nothing useful to do with a resize on a window it is discarding.
+            window.delegate = nil
+            window.close()
+            WindowLog.log("panel window released after \(Self.windowReleaseDelay) hidden")
+        }
     }
 
     public func reanchor(to anchor: NSRect?, on screen: NSScreen?) {
@@ -305,6 +343,10 @@ final class PanelWindow: NSPanel {
         hidesOnDeactivate = false
         animationBehavior = .none
         isRestorable = false
+        // `close()` is how the controller reclaims the view tree, and the default here
+        // is to have the window release itself when that happens — which, on a window
+        // ARC already owns through `PanelController.window`, is an over-release.
+        isReleasedWhenClosed = false
         // Follow the user across Spaces and appear over full-screen apps, the way
         // the system's own menu bar extras do.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
