@@ -345,14 +345,21 @@ public struct MenuBarRenderModel: Equatable, Sendable {
 
     /// A caption is a static word that never changes, and on a surface this scarce a
     /// static word is the most expensive thing on it. So it is strictly what the user
-    /// asked for, and only on the styles that draw no number of their own — an icon
-    /// already names its metric, and a number beside a caption is what made the menu
-    /// bar read as two labels and a value.
+    /// asked for — `showsCaption`, and nothing else, decides.
+    ///
+    /// The exception is the icon styles, which still refuse: a glyph already names the
+    /// metric, so "CPU" beside a CPU icon says it twice.
+    ///
+    /// `.text` honours the toggle rather than refusing it. It was briefly excluded on
+    /// the reasoning that a caption beside a number makes the item read as two labels
+    /// and a value — true when it is forced on everyone, but this is opt-in and off by
+    /// default, and "CPU 34%" is the readout some people want precisely because it
+    /// survives being glanced at next to a dozen other status items.
     private static func caption(for config: MenuBarItemConfig) -> String? {
         switch config.style {
-        case .text, .textAndGraph, .icon, .iconAndText:
+        case .icon, .iconAndText:
             return nil
-        case .graph, .bar, .ring:
+        case .text, .textAndGraph, .graph, .bar, .ring:
             guard config.showsCaption else { return nil }
         }
         switch config.metric {
