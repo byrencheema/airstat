@@ -38,7 +38,7 @@ public struct Sparkline: View {
     }
 
     private var scale: ChartScale {
-        ChartScale.resolve([series], adaptive: settings.usesAdaptiveScale)
+        ChartScale.resolve([series], adaptive: ChartSettings.usesAdaptiveScale)
     }
 
     /// The caption is not decoration and not subject to `showsValueLabels`: whenever
@@ -91,12 +91,12 @@ public struct Sparkline: View {
                     // A midline only means something against a fixed domain. On a
                     // derived scale "half of the window peak" is not a fact about the
                     // machine.
-                    if settings.showsGrid && !scale.isDerived {
+                    if ChartSettings.showsGrid && !scale.isDerived {
                         GridLayer(plot: plot, divisions: 2, interiorOnly: true)
                     }
                     SeriesLayer(plot: plot, size: size, tint: series.tint,
-                                style: settings.style, smoothed: settings.smoothsCurves)
-                    if settings.showsValueLabels, plot.supportsTrend,
+                                style: settings.style, smoothed: ChartSettings.smoothsCurves)
+                    if ChartSettings.showsValueLabels, plot.supportsTrend,
                        let last = plot.points.last {
                         PlotShape(ChartLayout.marker(at: CGPoint(x: rect.maxX, y: plot.y(last))))
                             .fill(series.tint)

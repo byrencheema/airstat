@@ -353,14 +353,14 @@ final class PanelWindow: NSPanel {
         isMovableByWindowBackground = false
         title = "AirStat Panel"
 
-        let visualEffect = NSVisualEffectView()
-        visualEffect.material = .menu
-        visualEffect.blendingMode = .behindWindow
-        visualEffect.state = .active
-        visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = Design.Radius.panel
-        visualEffect.layer?.cornerCurve = .continuous
-        visualEffect.layer?.masksToBounds = true
+        // `.hudWindow` rather than `.menu`: the panel is not a menu, and the menu
+        // material is nearly opaque — what is behind the panel should be visible
+        // through it. `.active` rather than following the window, because the panel is
+        // routinely looked at while another app is frontmost and a backdrop that goes
+        // flat the moment it opens defeats the point of having one.
+        let visualEffect = GlassBackdropView(material: .hudWindow,
+                                             cornerRadius: Design.Radius.panel,
+                                             state: .active)
 
         contentView.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.addSubview(contentView)

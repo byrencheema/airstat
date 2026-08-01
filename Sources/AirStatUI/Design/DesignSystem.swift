@@ -382,36 +382,139 @@ public struct MetricContent<Value: Sendable & Equatable, Content: View>: View {
 extension View {
     /// Background for a surface that floats above content the app does not own.
     ///
-    /// On macOS 26 this is Liquid Glass. Apple's guidance puts glass in the functional
-    /// layer — chrome that floats over content — and never in the content layer, and
-    /// the overlay is the one surface here that is unambiguously the former: it sits
-    /// on top of whatever the user happens to be looking at.
+    /// A blurred material plus `GlassSheen` — see that type for why the sheen is what
+    /// separates "translucent" from "glass".
     ///
-    /// Nothing else in the app takes this. The panel and the settings sidebar are
-    /// already drawn with `NSVisualEffectView`'s `.menu` and `.sidebar` materials,
-    /// which macOS 26 renders as glass on its own; putting `glassEffect` on top of
-    /// them would be glass sampling glass, which is the documented anti-pattern and
-    /// looks it. Form rows are content and take no material at all.
-    ///
-    /// Currently `.regularMaterial` everywhere, because the toolchain cannot build the
-    /// glass path yet: `glassEffect` needs the macOS 26 SDK from Xcode 26, and this
-    /// project builds against Xcode 16's macOS 15 SDK. It is not a deployment-target
-    /// question — `Package.swift` targets macOS 14 and an `#available(macOS 26)` check
-    /// would handle that fine — the symbol simply does not exist to compile against.
-    ///
-    /// This exists as its own modifier so that turning it on is a change to one
-    /// function rather than a hunt through the view tree. Once Xcode 26 is installed:
+    /// The real thing is macOS 26's `glassEffect`, which this project cannot compile
+    /// against: it needs the macOS 26 SDK from Xcode 26 and this builds on Xcode 16's
+    /// macOS 15 SDK. Not a deployment-target question — `Package.swift` targets macOS
+    /// 14 and an `#available(macOS 26)` check would handle that fine — the symbol
+    /// simply does not exist to link. When the toolchain moves, this one function is
+    /// the only thing that changes:
     ///
     ///     if #available(macOS 26.0, *) {
     ///         glassEffect(.regular, in: shape)
     ///     } else {
-    ///         background(.regularMaterial, in: shape)
+    ///         background(.regularMaterial, in: shape).overlay { GlassSheen(shape: shape) }
     ///     }
     ///
-    /// Reduce Transparency needs no handling at the call site in either form; the
-    /// system substitutes an opaque fill for both material and glass.
-    func floatingSurface(in shape: some Shape) -> some View {
+    /// Reduce Transparency needs no handling at the call site: the system substitutes
+    /// an opaque fill for the material, and the sheen is faint enough over it to read
+    /// as a bevel rather than as a smear.
+    func floatingSurface(in shape: some InsettableShape) -> some View {
         background(.regularMaterial, in: shape)
+            .overlay { GlassSheen(shape: shape) }
+    }
+}
+
+/// The specular pass that makes a blurred material read as glass.
+///
+/// Blur alone gives frosted plastic. What the eye actually reads as a pane of glass is
+/// its *edges*: light gathering along the top rim and falling away down the face. So
+/// this is two things and no more — a vertical highlight strongest at the top edge,
+/// and a hairline rim around the whole shape.
+///
+/// Deliberately faint. The surface under it is the content; a sheen you can point to
+/// is a sheen that is too strong, and at these values it survives being drawn over a
+/// white document and a black one.
+public struct GlassSheen<S: InsettableShape>: View {
+    private let shape: S
+
+    public init(shape: S) { self.shape = shape }
+
+    public var body: some View {
+        shape
+            .fill(LinearGradient(stops: [
+                .init(color: .white.opacity(0.20), location: 0),
+                .init(color: .white.opacity(0.04), location: 0.35),
+                .init(color: .clear, location: 1),
+            ], startPoint: .top, endPoint: .bottom))
+            .overlay {
+                shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.35),
+                                                           .white.opacity(0.08)],
+                                                  startPoint: .top, endPoint: .bottom),
+                                   lineWidth: Design.Space.hairline)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+// MARK: - AppKit glass
+
+/// An `NSVisualEffectView` carrying the same sheen, for the surfaces whose background
+/// is a window's content view rather than a SwiftUI modifier: the panel and both
+/// columns of the settings window.
+///
+/// The sheen is a subview rather than a sublayer of the effect view's own layer:
+/// `NSVisualEffectView` owns that layer tree and rebuilds it when the material or the
+/// window's active state changes, which would bury the sheen under the backdrop it is
+/// supposed to sit on. A subview added before the content is above the material and
+/// below everything drawn into the view, whatever AppKit does underneath.
+public final class GlassBackdropView: NSVisualEffectView {
+
+    private let sheen = CAGradientLayer()
+    private let sheenView = NSView()
+
+    public init(material: Material, cornerRadius: CGFloat = 0,
+                state: NSVisualEffectView.State = .followsWindowActiveState) {
+        super.init(frame: .zero)
+        self.material = material
+        self.state = state
+        blendingMode = .behindWindow
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = cornerRadius > 0
+
+        // A layer's origin is bottom-left in an unflipped view, so the gradient runs
+        // from 1 to 0 to be brightest at the top.
+        sheen.startPoint = CGPoint(x: 0.5, y: 1)
+        sheen.endPoint = CGPoint(x: 0.5, y: 0)
+        // A rounded surface is a pane, and light runs a good way down its face. A
+        // square-cornered one is a window column 560 points tall, where the same
+        // gradient is a wash across a third of the window rather than an edge — so
+        // there the highlight is held close to the top.
+        sheen.locations = cornerRadius > 0 ? [0, 0.35, 1] : [0, 0.05, 0.22]
+        sheen.cornerRadius = cornerRadius
+        sheen.cornerCurve = .continuous
+        sheen.borderWidth = cornerRadius > 0 ? 1 : 0
+        sheen.actions = ["position": NSNull(), "bounds": NSNull(), "colors": NSNull()]
+
+        sheenView.wantsLayer = true
+        sheenView.layer = sheen
+        sheenView.autoresizingMask = [.width, .height]
+        addSubview(sheenView)
+        applySheenColors()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    public override func layout() {
+        super.layout()
+        sheenView.frame = bounds
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applySheenColors()
+    }
+
+    /// Lighter in dark appearance than a naive reading suggests, and much lighter in
+    /// light appearance: the light material is already close to white, so a highlight
+    /// that reads at all there has to be nearly opaque at the very top and gone by a
+    /// third of the way down.
+    private func applySheenColors() {
+        let isDark = effectiveAppearance.isDark
+        let top = isDark ? 0.16 : 0.55
+        let mid = isDark ? 0.03 : 0.10
+        sheen.colors = [
+            NSColor(white: 1, alpha: top).cgColor,
+            NSColor(white: 1, alpha: mid).cgColor,
+            NSColor(white: 1, alpha: 0).cgColor,
+        ]
+        sheen.borderColor = NSColor(white: 1, alpha: isDark ? 0.14 : 0.5).cgColor
     }
 }
 
@@ -434,6 +537,15 @@ extension Color {
         return ThemeColor(red: Double(srgb.redComponent),
                           green: Double(srgb.greenComponent),
                           blue: Double(srgb.blueComponent))
+    }
+}
+
+extension NSColor {
+    /// A stored override as an AppKit colour. The menu bar draws in Core Graphics and
+    /// never sees a SwiftUI `Color`, so it resolves overrides through here.
+    public convenience init(themeColor: ThemeColor) {
+        self.init(srgbRed: themeColor.red, green: themeColor.green, blue: themeColor.blue,
+                  alpha: 1)
     }
 }
 

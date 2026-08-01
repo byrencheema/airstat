@@ -112,7 +112,9 @@ struct OverlayPane: View {
             Section {
                 HStack {
                     Spacer()
-                    RestoreDefaultsButton(settings: settings, section: .overlay, title: "Overlay")
+                    RestoreDefaultsButton(settings: settings,
+                                          sections: SettingsTab.overlay.sections,
+                                          title: "Overlay")
                 }
             }
         }

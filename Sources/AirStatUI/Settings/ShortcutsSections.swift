@@ -2,7 +2,12 @@ import SwiftUI
 import AppKit
 import AirStatKit
 
-struct ShortcutsPane: View {
+/// The shortcut rows, as sections for another pane's `Form`.
+///
+/// Three recorder rows did not need a source-list entry of their own, so these live
+/// in General now. They are still their own file: the conflict detection below is the
+/// substance of the feature and does not belong in a pane about sampling and units.
+struct ShortcutsFormSections: View {
     let settings: SettingsStore
 
     private var bindings: [ShortcutAction: AirStatKit.KeyboardShortcut] {
@@ -10,7 +15,7 @@ struct ShortcutsPane: View {
     }
 
     var body: some View {
-        Form {
+        Group {
             Section {
                 ForEach(ShortcutAction.allCases, id: \.self) { action in
                     LabeledContent(action.label) {
@@ -18,9 +23,9 @@ struct ShortcutsPane: View {
                     }
                 }
             } header: {
-                Text("Keyboard Shortcuts")
+                Text("Shortcuts")
             } footer: {
-                SettingsFootnote("Click a shortcut, then press the combination you want. Escape cancels, Delete clears. A shortcut needs ⌘, ⌃ or ⌥ in it — anything simpler would fire while you were typing in another app.")
+                SettingsFootnote("Click one, then press the combination. It needs ⌘, ⌃ or ⌥ in it, or it would fire while you were typing in another app. AirStat cannot tell whether another app already has a combination — macOS gives no way to ask.")
             }
 
             if !conflicts.isEmpty {
@@ -29,22 +34,12 @@ struct ShortcutsPane: View {
                         SettingsCaution(conflict)
                     }
                 } header: {
-                    Text("Conflicts")
+                    Text("Shortcut Conflicts")
                 } footer: {
-                    SettingsFootnote("Two actions cannot share one combination — whichever was registered first would win, and which that is is not something you can predict.")
+                    SettingsFootnote("Two actions cannot share one combination — whichever registered first wins, and which that is is not something you can predict.")
                 }
-            }
-
-            Section {
-                HStack {
-                    Spacer()
-                    RestoreDefaultsButton(settings: settings, section: .shortcuts, title: "Shortcuts")
-                }
-            } footer: {
-                SettingsFootnote("AirStat cannot see whether another app has already claimed a combination — macOS gives no way to ask. If a shortcut does nothing, something else almost certainly has it.")
             }
         }
-        .settingsFormStyle()
     }
 
     /// Two actions on the same key code and modifier set. Compared on the stored

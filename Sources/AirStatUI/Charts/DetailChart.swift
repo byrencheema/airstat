@@ -46,7 +46,7 @@ public struct DetailChart: View {
     }
 
     private var scale: ChartScale {
-        ChartScale.resolve(series, adaptive: settings.usesAdaptiveScale)
+        ChartScale.resolve(series, adaptive: ChartSettings.usesAdaptiveScale)
     }
 
     private var hasSamples: Bool { series.contains { !$0.stats.isEmpty } }
@@ -58,7 +58,7 @@ public struct DetailChart: View {
     /// for — a callout measured on its own always thinks it fits.
     @ViewBuilder
     private var header: some View {
-        if title != nil || series.count > 1 || settings.showsValueLabels {
+        if title != nil || series.count > 1 || ChartSettings.showsValueLabels {
             ViewThatFits(in: .horizontal) {
                 headerRow(showsSeriesNames: true)
                 headerRow(showsSeriesNames: false)
@@ -76,7 +76,7 @@ public struct DetailChart: View {
                     .truncationMode(.tail)
             }
             Spacer(minLength: Design.Space.xs)
-            if hasSamples && settings.showsValueLabels {
+            if hasSamples && ChartSettings.showsValueLabels {
                 ForEach(Array(series.enumerated()), id: \.offset) { _, item in
                     calloutBody(item, showsName: showsSeriesNames)
                 }
@@ -138,16 +138,16 @@ public struct DetailChart: View {
                 let scale = self.scale
                 let plots = series.map { ChartPlot(rect: rect, scale: scale, samples: $0.samples) }
                 ZStack {
-                    if settings.showsGrid, let first = plots.first {
+                    if ChartSettings.showsGrid, let first = plots.first {
                         GridLayer(plot: first)
                     }
                     // Drawn back to front so the first series — the one the module is
                     // really about — ends up on top of any companion series.
                     ForEach(Array(plots.enumerated()).reversed(), id: \.offset) { index, plot in
                         SeriesLayer(plot: plot, size: size, tint: series[index].tint,
-                                    style: settings.style, smoothed: settings.smoothsCurves)
+                                    style: settings.style, smoothed: ChartSettings.smoothsCurves)
                     }
-                    if settings.showsValueLabels {
+                    if ChartSettings.showsValueLabels {
                         ForEach(Array(plots.enumerated()), id: \.offset) { index, plot in
                             if plot.supportsTrend, let last = plot.points.last {
                                 PlotShape(ChartLayout.marker(at: CGPoint(x: rect.maxX,
@@ -235,7 +235,7 @@ public struct DetailChart: View {
     private var statisticsTiers: [String] {
         guard let first = series.first, !first.stats.isEmpty else { return [""] }
         let stats = first.stats
-        guard settings.showsValueLabels, stats.supportsTrend else {
+        guard ChartSettings.showsValueLabels, stats.supportsTrend else {
             return scale.isDerived ? ["peak \(first.string(scale.peak, using: formatter))"] : [""]
         }
         let prefix = series.count > 1 ? "\(first.label)  " : ""

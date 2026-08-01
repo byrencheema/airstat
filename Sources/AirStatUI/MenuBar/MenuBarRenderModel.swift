@@ -37,6 +37,12 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var id: UUID
     public var style: MenuBarDisplayStyle
     public var colorMode: ColorMode
+    /// The colour the user chose for this metric, or nil if they have left it alone.
+    ///
+    /// Carried as data rather than resolved in the view from the theme, because the
+    /// status item redraws only when this model changes: a view that read the palette
+    /// itself would keep drawing yesterday's colour until some *other* field moved.
+    public var tint: ThemeColor?
     /// Short caption such as "CPU", drawn beside the readout. Only ever set for the
     /// styles that draw no number of their own, and only when the user asks for it.
     public var caption: String?
@@ -53,13 +59,15 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var graphWidth: Double?
     public var accessibilityLabel: String
 
-    public init(id: UUID, style: MenuBarDisplayStyle, colorMode: ColorMode, caption: String?,
+    public init(id: UUID, style: MenuBarDisplayStyle, colorMode: ColorMode,
+                tint: ThemeColor? = nil, caption: String?,
                 primary: MenuBarLine, secondary: MenuBarLine? = nil, fraction: Double?,
                 severity: MetricSeverity, isUnavailable: Bool, symbolName: String?,
                 graphWidth: Double? = nil, accessibilityLabel: String) {
         self.id = id
         self.style = style
         self.colorMode = colorMode
+        self.tint = tint
         self.caption = caption
         self.primary = primary
         self.secondary = secondary
@@ -91,7 +99,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 isStale: Bool) {
         let formatter = MetricFormatter(settings: settings.general)
         self.spacing = settings.menuBar.itemSpacing
-        self.usesMonospacedDigits = settings.menuBar.usesMonospacedDigits
+        self.usesMonospacedDigits = MenuBarSettings.usesMonospacedDigits
         self.usesFixedWidth = settings.menuBar.usesFixedWidth
         self.isStale = isStale
 
@@ -331,6 +339,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             id: config.id,
             style: config.style,
             colorMode: config.colorMode,
+            // Only a colour the user actually picked. The shipped metric colours stay
+            // out of the menu bar: it is a monochrome surface that Apple's own extras
+            // never colour, and a CPU readout that is blue because blue is what CPU
+            // charts happen to be is noise the user never asked for.
+            tint: settings.theme.color(for: config.metric.requiredSource),
             caption: caption,
             primary: primary,
             secondary: secondary,

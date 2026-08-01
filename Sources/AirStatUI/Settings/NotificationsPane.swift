@@ -41,7 +41,8 @@ struct NotificationsPane: View {
             Section {
                 HStack {
                     Spacer()
-                    RestoreDefaultsButton(settings: settings, section: .notifications,
+                    RestoreDefaultsButton(settings: settings,
+                                          sections: SettingsTab.notifications.sections,
                                           title: "Notifications")
                 }
             }

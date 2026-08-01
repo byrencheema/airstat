@@ -88,10 +88,8 @@ struct AboutPane: View {
 
             Section {
                 Menu("Restore One Section…") {
-                    ForEach(SettingsTab.allCases) { tab in
-                        if let section = tab.section {
-                            Button(tab.label) { settings.resetSection(section) }
-                        }
+                    ForEach(SettingsStore.SettingsSection.allCases, id: \.self) { section in
+                        Button(section.label) { settings.resetSection(section) }
                     }
                 }
                 .fixedSize()

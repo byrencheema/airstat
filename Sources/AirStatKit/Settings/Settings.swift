@@ -76,21 +76,27 @@ public enum AppearanceMode: String, Sendable, Codable, CaseIterable, Equatable, 
     }
 }
 
-/// How a value is coloured. Monochrome is the macOS-native default — the menu bar
-/// is a monochrome surface and colour there reads as noise unless it means something.
+/// How a menu bar readout is coloured.
+///
+/// Two modes, not three. There used to be a separate "Metric Colour" that painted a
+/// readout in the metric's *shipped* identity colour; it is gone because picking a
+/// colour in Appearance is now what makes a readout coloured, and a mode meaning
+/// "use a colour I never chose" was the one nobody could predict from the outside.
 public enum ColorMode: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    /// Follows the menu bar's own tint, including inverted appearance when a
-    /// dark wallpaper or menu bar highlight is behind it.
-    case monochrome
-    /// The metric's own identity colour.
-    case tinted
-    /// Green → yellow → red as the value crosses its thresholds.
+    /// Follows the menu bar's own tint — including the inverted appearance under a
+    /// highlight or a dark wallpaper — unless the user has chosen a colour for this
+    /// metric, which is then what the readout is drawn in.
+    ///
+    /// The raw value stays `monochrome` so files written by earlier builds decode
+    /// onto it; a file saying `tinted` falls back here too, which is where that mode
+    /// went.
+    case automatic = "monochrome"
+    /// Yellow → orange → red as the value crosses its thresholds.
     case threshold
 
     public var label: String {
         switch self {
-        case .monochrome: return "Monochrome"
-        case .tinted: return "Metric Colour"
+        case .automatic: return "Automatic"
         case .threshold: return "By Threshold"
         }
     }
@@ -194,7 +200,7 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
     public var showsCaption: Bool
 
     public init(id: UUID = UUID(), metric: MenuBarMetric, style: MenuBarDisplayStyle = .text,
-                isEnabled: Bool = true, colorMode: ColorMode = .monochrome,
+                isEnabled: Bool = true, colorMode: ColorMode = .automatic,
                 graphWidth: Double? = nil, showsCaption: Bool = false) {
         self.id = id
         self.metric = metric
@@ -226,7 +232,7 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
         metric = c.value(.metric, or: MenuBarMetric.cpuUsage)
         style = c.value(.style, or: MenuBarDisplayStyle.text)
         isEnabled = c.value(.isEnabled, or: true)
-        colorMode = c.value(.colorMode, or: ColorMode.monochrome)
+        colorMode = c.value(.colorMode, or: ColorMode.automatic)
         graphWidth = try? c.decodeIfPresent(Double.self, forKey: .graphWidth)
         showsCaption = c.value(.showsCaption, or: false)
     }
@@ -243,24 +249,25 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var hidesIdleItems: Bool
     /// Value below which a readout counts as idle, 0...1.
     public var idleThreshold: Double
-    /// Render numbers in a fixed-width font so the menu bar does not jitter.
-    public var usesMonospacedDigits: Bool
     /// Reserve width for the widest plausible value so items never reflow.
     public var usesFixedWidth: Bool
+
+    /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
+    /// proportional digits shimmers as it changes, which is the single most visible
+    /// cheapness tell in a stats app, and nobody was ever going to want it.
+    public static let usesMonospacedDigits = true
 
     public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
                 itemSpacing: Double = 8,
                 usesCombinedItem: Bool = true,
                 hidesIdleItems: Bool = false,
                 idleThreshold: Double = 0.02,
-                usesMonospacedDigits: Bool = true,
                 usesFixedWidth: Bool = true) {
         self.items = items
         self.itemSpacing = itemSpacing
         self.usesCombinedItem = usesCombinedItem
         self.hidesIdleItems = hidesIdleItems
         self.idleThreshold = idleThreshold
-        self.usesMonospacedDigits = usesMonospacedDigits
         self.usesFixedWidth = usesFixedWidth
     }
 
@@ -284,7 +291,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case items, itemSpacing, usesCombinedItem, hidesIdleItems, idleThreshold
-        case usesMonospacedDigits, usesFixedWidth
+        case usesFixedWidth
     }
 
     public init(from decoder: Decoder) throws {
@@ -296,7 +303,6 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         usesCombinedItem = c.value(.usesCombinedItem, or: true)
         hidesIdleItems = c.value(.hidesIdleItems, or: false)
         idleThreshold = min(max(c.value(.idleThreshold, or: 0.02), 0), 1)
-        usesMonospacedDigits = c.value(.usesMonospacedDigits, or: true)
         usesFixedWidth = c.value(.usesFixedWidth, or: true)
     }
 }
@@ -409,45 +415,48 @@ public enum ChartStyle: String, Sendable, Codable, CaseIterable, Equatable, Hash
     }
 }
 
+/// What the charts remember.
+///
+/// Two settings, where there were six. Grid, value labels, curve smoothing and
+/// adaptive scaling were each a toggle governing one detail of how a 28-point
+/// sparkline is drawn — four decisions the app is better placed to make than the
+/// user, and four rows of settings standing between them and the two that change
+/// what a chart actually says. They are constants now, at the values every one of
+/// them shipped switched on.
 public struct ChartSettings: Sendable, Codable, Equatable {
     /// Seconds of history retained and drawn.
     public var historyDuration: TimeInterval
     public var style: ChartStyle
-    public var showsGrid: Bool
-    /// Scale rate charts to the peak in the window rather than a fixed maximum.
-    public var usesAdaptiveScale: Bool
-    public var showsValueLabels: Bool
-    /// Smooth the drawn line without smoothing the underlying data.
-    public var smoothsCurves: Bool
+
+    /// Previously `showsGrid`.
+    public static let showsGrid = true
+    /// Previously `usesAdaptiveScale`: rate charts scale to the peak in the window,
+    /// because a rate has no maximum to scale against instead.
+    public static let usesAdaptiveScale = true
+    /// Previously `showsValueLabels`.
+    public static let showsValueLabels = true
+    /// Previously `smoothsCurves`. Smooths the drawn line only; samples are never
+    /// averaged, so a spike is still a spike in the number beside it.
+    public static let smoothsCurves = true
 
     public init(historyDuration: TimeInterval = 300,
-                style: ChartStyle = .filledLine,
-                showsGrid: Bool = true,
-                usesAdaptiveScale: Bool = true,
-                showsValueLabels: Bool = true,
-                smoothsCurves: Bool = true) {
+                style: ChartStyle = .filledLine) {
         self.historyDuration = historyDuration
         self.style = style
-        self.showsGrid = showsGrid
-        self.usesAdaptiveScale = usesAdaptiveScale
-        self.showsValueLabels = showsValueLabels
-        self.smoothsCurves = smoothsCurves
     }
 
     public static let allowedDurations: [TimeInterval] = [60, 300, 600, 1800, 3600]
 
     private enum CodingKeys: String, CodingKey {
-        case historyDuration, style, showsGrid, usesAdaptiveScale, showsValueLabels, smoothsCurves
+        case historyDuration, style
     }
 
+    /// Files written before the drawing toggles were removed still load: the keys they
+    /// carry are simply not read, and an unknown key has never been an error here.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         historyDuration = min(max(c.value(.historyDuration, or: 300.0), 30), 3600)
         style = c.value(.style, or: ChartStyle.filledLine)
-        showsGrid = c.value(.showsGrid, or: true)
-        usesAdaptiveScale = c.value(.usesAdaptiveScale, or: true)
-        showsValueLabels = c.value(.showsValueLabels, or: true)
-        smoothsCurves = c.value(.smoothsCurves, or: true)
     }
 }
 

@@ -234,9 +234,13 @@ private struct PanelPreviewHost: View {
     let request: OffscreenRenderer.Request
 
     var body: some View {
+        // Stands SwiftUI's `.regularMaterial` in for the panel window's real
+        // `NSVisualEffectView`, which draws nothing offscreen. The sheen over it is the
+        // same one the window applies, so the glass edge at least renders here.
         PanelRootView(engine: PreviewEngine.make(request), settings: PreviewEngine.store(request))
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
+                                                  style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))
     }
 }
 

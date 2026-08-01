@@ -59,7 +59,6 @@ struct MenuBarPane: View {
                 }
                 .accessibilityElement(children: .contain)
 
-                Toggle("Use fixed-width digits", isOn: settings.binding(\.menuBar.usesMonospacedDigits))
                 Toggle("Reserve space for the widest value",
                        isOn: settings.binding(\.menuBar.usesFixedWidth))
                 Toggle("Combine into one menu bar item",
@@ -94,7 +93,9 @@ struct MenuBarPane: View {
             Section {
                 HStack {
                     Spacer()
-                    RestoreDefaultsButton(settings: settings, section: .menuBar, title: "Menu Bar")
+                    RestoreDefaultsButton(settings: settings,
+                                          sections: SettingsTab.menuBar.sections,
+                                          title: "Menu Bar")
                 }
             }
         }

@@ -96,6 +96,21 @@ public final class SettingsStore {
 
     public enum SettingsSection: String, Sendable, CaseIterable {
         case general, menuBar, charts, overlay, notifications, shortcuts, theme
+
+        /// What this subtree is called in the window. Here rather than in the UI layer
+        /// because the reset menu lists sections, not panes — one pane now edits more
+        /// than one of these.
+        public var label: String {
+            switch self {
+            case .general: return "General"
+            case .menuBar: return "Menu Bar"
+            case .charts: return "Charts"
+            case .overlay: return "Overlay"
+            case .notifications: return "Notifications"
+            case .shortcuts: return "Shortcuts"
+            case .theme: return "Colors"
+            }
+        }
     }
 
     // MARK: Import / export

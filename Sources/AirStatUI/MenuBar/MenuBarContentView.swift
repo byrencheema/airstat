@@ -459,7 +459,13 @@ public final class MenuBarContentView: NSView {
         }
 
         func colors(for item: MenuBarItemRender) -> (NSColor, CGColor, CGColor) {
-            guard let override = override(for: item) else { return (base, solid, muted) }
+            guard var override = override(for: item) else { return (base, solid, muted) }
+            // An overridden colour is still subject to the staleness dimming the base
+            // tint carries, so a coloured readout goes quiet with everything else
+            // rather than being the one number that keeps claiming to be current.
+            if base.alphaComponent < 1 {
+                override = override.withAlphaComponent(override.alphaComponent * base.alphaComponent)
+            }
             return (override, override.cgColor,
                     override.withAlphaComponent(override.alphaComponent * Layout.captionAlpha).cgColor)
         }
@@ -470,16 +476,24 @@ public final class MenuBarContentView: NSView {
             if item.isUnavailable {
                 return base.withAlphaComponent(base.alphaComponent * Layout.unavailableAlpha)
             }
-            // The menu bar is a monochrome surface; a metric's identity colour there
-            // reads as noise, so `.tinted` follows the bar too. Only thresholds — which
-            // carry information the shape cannot — are allowed to introduce colour.
-            guard item.colorMode == .threshold else { return nil }
-            switch item.severity {
-            case .normal: return nil
-            case .elevated: return .systemYellow
-            case .high: return .systemOrange
-            case .critical: return .systemRed
+            switch item.colorMode {
+            case .threshold:
+                // Thresholds carry information the shape cannot, and outrank a chosen
+                // colour: a readout is red because something is wrong, and a user who
+                // picked their own colour for CPU did not thereby ask to stop being
+                // told. At `.normal` there is nothing to say, so the choice applies.
+                switch item.severity {
+                case .normal: break
+                case .elevated: return .systemYellow
+                case .high: return .systemOrange
+                case .critical: return .systemRed
+                }
+            case .automatic:
+                break
             }
+            // The menu bar is a monochrome surface and stays one by default. A colour
+            // appears here only because the user went and chose one for this metric.
+            return item.tint.map(NSColor.init(themeColor:))
         }
     }
 

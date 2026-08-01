@@ -31,12 +31,15 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.center()
     }
 
-    /// Eight panes of forms, chart galleries and colour wells cost 12.6 MB of dirty,
+    /// Panes of forms, chart galleries and colour wells cost 12.6 MB of dirty,
     /// non-reclaimable heap (`footprint`, MALLOC_SMALL, this machine) once they have
     /// been built. Settings is opened rarely and closed for the rest of the session, so
     /// keeping that resident until quit is the worst of both worlds — the window is
     /// discarded on close and rebuilt on the next `show`.
     public func windowWillClose(_ notification: Notification) {
+        // The colour panel is not ours and does not go with the window; left alone it
+        // stays on screen editing a swatch that no longer exists.
+        ColorPanel.close()
         window = nil
     }
 
@@ -72,8 +75,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 }
 
 /// The settings window's content: a source list of panes beside the selected one,
-/// which is the shape macOS System Settings uses and the only one that stays
-/// readable at eight sections.
+/// which is the shape macOS System Settings uses.
 struct SettingsRootView: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
@@ -102,17 +104,22 @@ struct SettingsRootView: View {
                 .background(VisualEffect(material: .sidebar))
             pane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Was an opaque `windowBackgroundColor`. The panel is a translucent
-                // menu surface, and a settings window that is flat grey beside it reads
-                // as a different app's window. `.underWindowBackground` is the material
-                // macOS uses for exactly this — a window's content area that lets the
-                // desktop through — and it sits at the same vibrancy level as the
-                // sidebar next to it, so the two columns stay differentiated.
-                .background(VisualEffect(material: .underWindowBackground))
+                // Was an opaque `windowBackgroundColor`, then `.underWindowBackground`.
+                // `.hudWindow` is the most transparent material AppKit ships, which is
+                // what makes this column read as glass rather than as tinted grey, and
+                // it still sits a level apart from the sidebar beside it so the two
+                // columns stay differentiated.
+                .background(VisualEffect(material: .hudWindow))
         }
         .frame(width: windowWidth, height: windowHeight)
         .onAppear { onPaneChange?(tab) }
-        .onChange(of: tab) { _, newValue in onPaneChange?(newValue) }
+        .onChange(of: tab) { _, newValue in
+            // The colour wheel belongs to the row that opened it. Leaving another
+            // pane's swatch being edited from a floating window is how you end up
+            // dragging a colour onto something you cannot see.
+            ColorPanel.close()
+            onPaneChange?(newValue)
+        }
     }
 
     /// Laid out by hand rather than with `NavigationSplitView`, which drew an opaque
@@ -184,11 +191,9 @@ struct SettingsRootView: View {
         switch tab {
         case .general: GeneralPane(settings: settings)
         case .menuBar: MenuBarPane(settings: settings, engine: engine)
-        case .charts: ChartsPane(settings: settings)
-        case .colors: ColorsPane(settings: settings)
+        case .appearance: AppearancePane(settings: settings)
         case .overlay: OverlayPane(settings: settings, engine: engine)
         case .notifications: NotificationsPane(settings: settings, engine: engine)
-        case .shortcuts: ShortcutsPane(settings: settings)
         case .about: AboutPane(settings: settings, engine: engine)
         }
     }

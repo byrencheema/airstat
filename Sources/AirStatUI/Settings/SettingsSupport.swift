@@ -5,8 +5,14 @@ import AirStatKit
 // MARK: - Panes
 
 /// The settings window's sections, in sidebar order.
+///
+/// Six, where there were eight. Charts was two settings and a wall of prose about
+/// four more that no longer exist; it is a section of Appearance now, next to the
+/// colours it shares a subject with. Shortcuts was three recorder rows, and sits in
+/// General. Nothing was lost in either move — an eight-item source list for an app
+/// with one window and one menu bar item was the thing that read as unfinished.
 public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, menuBar, charts, colors, overlay, notifications, shortcuts, about
+    case general, menuBar, appearance, overlay, notifications, about
 
     public var id: String { rawValue }
 
@@ -14,11 +20,9 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: return "General"
         case .menuBar: return "Menu Bar"
-        case .charts: return "Charts"
-        case .colors: return "Colors"
+        case .appearance: return "Appearance"
         case .overlay: return "Overlay"
         case .notifications: return "Notifications"
-        case .shortcuts: return "Shortcuts"
         case .about: return "About"
         }
     }
@@ -27,28 +31,23 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: return "gearshape"
         case .menuBar: return "menubar.rectangle"
-        case .charts: return "chart.xyaxis.line"
-        case .colors: return "paintpalette"
+        case .appearance: return "paintpalette"
         case .overlay: return "macwindow.on.rectangle"
         case .notifications: return "bell.badge"
-        case .shortcuts: return "keyboard"
         case .about: return "info.circle"
         }
     }
 
-    /// The settings subtree this pane edits, so a pane can offer its own
-    /// restore-defaults without every pane hardcoding the mapping. About edits
-    /// nothing of its own.
-    public var section: SettingsStore.SettingsSection? {
+    /// The settings subtrees this pane edits, so a pane can offer its own
+    /// restore-defaults without hardcoding the mapping. About edits nothing of its own.
+    public var sections: [SettingsStore.SettingsSection] {
         switch self {
-        case .general: return .general
-        case .menuBar: return .menuBar
-        case .charts: return .charts
-        case .colors: return .theme
-        case .overlay: return .overlay
-        case .notifications: return .notifications
-        case .shortcuts: return .shortcuts
-        case .about: return nil
+        case .general: return [.general, .shortcuts]
+        case .menuBar: return [.menuBar]
+        case .appearance: return [.theme, .charts]
+        case .overlay: return [.overlay]
+        case .notifications: return [.notifications]
+        case .about: return []
         }
     }
 
@@ -115,24 +114,21 @@ extension SettingsStore {
 
 // MARK: - Materials
 
-/// An AppKit material behind SwiftUI content.
+/// An AppKit material, with the app's glass sheen, behind SwiftUI content.
 ///
-/// The sidebar needs one: without it the source list and the content area resolve
-/// to the same fill (measured `#353535` for both in dark mode, in the real window),
-/// so the two columns read as one undifferentiated surface. Material is what macOS
-/// uses to separate them, and it is not reachable from SwiftUI alone.
+/// The sidebar needs a material of its own: without one the source list and the
+/// content area resolve to the same fill (measured `#353535` for both in dark mode,
+/// in the real window), so the two columns read as one undifferentiated surface.
+/// Material is what macOS uses to separate them, and it is not reachable from
+/// SwiftUI alone.
 struct VisualEffect: NSViewRepresentable {
     let material: NSVisualEffectView.Material
 
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .followsWindowActiveState
-        return view
+    func makeNSView(context: Context) -> GlassBackdropView {
+        GlassBackdropView(material: material)
     }
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+    func updateNSView(_ view: GlassBackdropView, context: Context) {
         view.material = material
     }
 }
@@ -271,11 +267,15 @@ struct UnavailableBadge: View {
 
 // MARK: - Shared controls
 
-/// Restores one subtree to its shipped defaults, behind a confirmation because it
-/// is the only irreversible control in the window.
+/// Restores what one pane edits to its shipped defaults, behind a confirmation
+/// because it is the only irreversible control in the window.
+///
+/// Takes a list rather than a single section: a pane can now edit more than one
+/// subtree, and a button that quietly restored half of what the user was looking at
+/// would be worse than no button.
 struct RestoreDefaultsButton: View {
     let settings: SettingsStore
-    let section: SettingsStore.SettingsSection
+    let sections: [SettingsStore.SettingsSection]
     let title: String
 
     @State private var isConfirming = false
@@ -285,13 +285,26 @@ struct RestoreDefaultsButton: View {
             .confirmationDialog("Restore \(title) settings to their defaults?",
                                 isPresented: $isConfirming) {
                 Button("Restore Defaults", role: .destructive) {
-                    settings.resetSection(section)
+                    for section in sections { settings.resetSection(section) }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Only the \(title) section is affected. Other settings are left alone.")
+                Text("Only \(title) is affected. Other settings are left alone.")
             }
-            .accessibilityHint("Restores the \(title) section to its default values")
+            .accessibilityHint("Restores \(title) to its default values")
+    }
+}
+
+/// The shared colour panel, closed rather than left standing.
+///
+/// `ColorPicker` opens the one process-wide `NSColorPanel` and never takes
+/// responsibility for closing it, so the wheel outlives the row that opened it: switch
+/// panes, or close the whole window, and it is still floating there editing a swatch
+/// nobody can see. Nothing in AppKit does this for us.
+enum ColorPanel {
+    static func close() {
+        guard NSColorPanel.sharedColorPanelExists else { return }
+        NSColorPanel.shared.orderOut(nil)
     }
 }
 

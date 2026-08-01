@@ -28,21 +28,6 @@ struct GeneralPane: View {
             }
 
             Section {
-                Picker("Appearance", selection: settings.binding(\.general.appearance,
-                                                                 onChange: applyAppearance)) {
-                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                Toggle("Show icon in the Dock",
-                       isOn: settings.binding(\.general.showsDockIcon, onChange: applyDockIcon))
-            } header: {
-                Text("Appearance")
-            } footer: {
-                SettingsFootnote("AirStat normally lives only in the menu bar. A Dock icon also gives it an app switcher entry.")
-            }
-
-            Section {
                 Picker("Temperature", selection: settings.binding(\.general.temperatureUnit)) {
                     ForEach(TemperatureUnit.allCases, id: \.self) { unit in
                         Text(unit.label).tag(unit)
@@ -65,31 +50,30 @@ struct GeneralPane: View {
                 SettingsFootnote("Memory is always shown in binary units, because that is what Apple reports — 18 GB of RAM is 19,327,352,832 bytes.")
             }
 
+            ShortcutsFormSections(settings: settings)
+
             Section {
                 Toggle("Open AirStat at login",
                        isOn: settings.binding(\.general.launchAtLogin, onChange: applyLoginItem))
                 if let loginItemError {
                     SettingsCaution(loginItemError)
                 }
-            } header: {
-                Text("Startup")
-            } footer: {
-                SettingsFootnote("Registered through Login Items, where you can also revoke it. Nothing is installed outside the app.")
-            }
-
-            Section {
+                Toggle("Show icon in the Dock",
+                       isOn: settings.binding(\.general.showsDockIcon, onChange: applyDockIcon))
                 Toggle("Look up my public IP address",
                        isOn: settings.binding(\.general.fetchesPublicIP))
             } header: {
-                Text("Privacy")
+                Text("Startup & Privacy")
             } footer: {
-                SettingsFootnote("The only part of AirStat that touches the network. It asks an external lookup service, which necessarily sees your address. Everything else is read from this Mac and never leaves it.")
+                SettingsFootnote("Login is registered through Login Items, where you can also revoke it. The IP lookup is the only part of AirStat that touches the network — it asks an external service, which necessarily sees your address. Everything else is read from this Mac and never leaves it.")
             }
 
             Section {
                 HStack {
                     Spacer()
-                    RestoreDefaultsButton(settings: settings, section: .general, title: "General")
+                    RestoreDefaultsButton(settings: settings,
+                                          sections: SettingsTab.general.sections,
+                                          title: "General")
                 }
             }
         }
@@ -97,18 +81,9 @@ struct GeneralPane: View {
     }
 
     // MARK: Side effects
-    //
-    // Both of these are process-level state rather than stored preferences, so the
-    // store's value alone would change nothing until the next launch.
 
-    private func applyAppearance(_ mode: AppearanceMode) {
-        switch mode {
-        case .system: NSApp.appearance = nil
-        case .light: NSApp.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
-        }
-    }
-
+    /// Process-level state rather than a stored preference, so the store's value alone
+    /// would change nothing until the next launch.
     private func applyDockIcon(_ shows: Bool) {
         NSApp.setActivationPolicy(shows ? .regular : .accessory)
         // Switching policy drops key window status; take it back so the settings
