@@ -1,0 +1,521 @@
+import SwiftUI
+import AppKit
+import AirStatKit
+
+// MARK: - Panes
+
+/// The settings window's sections, in sidebar order.
+public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
+    case general, menuBar, charts, colors, overlay, notifications, shortcuts, about
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .general: return "General"
+        case .menuBar: return "Menu Bar"
+        case .charts: return "Charts"
+        case .colors: return "Colors"
+        case .overlay: return "Overlay"
+        case .notifications: return "Notifications"
+        case .shortcuts: return "Shortcuts"
+        case .about: return "About"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .general: return "gearshape"
+        case .menuBar: return "menubar.rectangle"
+        case .charts: return "chart.xyaxis.line"
+        case .colors: return "paintpalette"
+        case .overlay: return "macwindow.on.rectangle"
+        case .notifications: return "bell.badge"
+        case .shortcuts: return "keyboard"
+        case .about: return "info.circle"
+        }
+    }
+
+    /// The settings subtree this pane edits, so a pane can offer its own
+    /// restore-defaults without every pane hardcoding the mapping. About edits
+    /// nothing of its own.
+    public var section: SettingsStore.SettingsSection? {
+        switch self {
+        case .general: return .general
+        case .menuBar: return .menuBar
+        case .charts: return .charts
+        case .colors: return .theme
+        case .overlay: return .overlay
+        case .notifications: return .notifications
+        case .shortcuts: return .shortcuts
+        case .about: return nil
+        }
+    }
+
+    /// Which pane the offscreen renderer opens on.
+    ///
+    /// The render harness constructs `SettingsRootView` with no arguments, so the
+    /// only way to inspect a pane other than the first is to let the environment
+    /// choose it. `AIRSTAT_SETTINGS_TAB=overlay AirStat --render settings` renders
+    /// the overlay pane; unset, it behaves exactly as the real window does.
+    static var renderDefault: SettingsTab {
+        guard let raw = ProcessInfo.processInfo.environment["AIRSTAT_SETTINGS_TAB"],
+              let tab = SettingsTab(rawValue: raw) else { return .general }
+        return tab
+    }
+}
+
+// MARK: - Bindings
+
+@MainActor
+extension SettingsStore {
+    /// A binding that routes every write through `update`, so clamping, the
+    /// revision bump and the debounced save can never be bypassed by a control.
+    func binding<Value>(_ keyPath: WritableKeyPath<AirStatKit.Settings, Value>) -> Binding<Value> {
+        Binding(get: { self.settings[keyPath: keyPath] },
+                set: { newValue in self.update { $0[keyPath: keyPath] = newValue } })
+    }
+
+    /// As above, with a hook that runs after the store has accepted the change —
+    /// for the handful of settings that also need a system-level side effect.
+    func binding<Value>(_ keyPath: WritableKeyPath<AirStatKit.Settings, Value>,
+                        onChange: @escaping (Value) -> Void) -> Binding<Value> {
+        Binding(get: { self.settings[keyPath: keyPath] },
+                set: { newValue in
+                    self.update { $0[keyPath: keyPath] = newValue }
+                    onChange(self.settings[keyPath: keyPath])
+                })
+    }
+
+    /// A slider binding that quantises on write.
+    ///
+    /// Quantising here rather than through `Slider(step:)` keeps the value tidy
+    /// without AppKit drawing a tick for every step — twenty-five ticks under a
+    /// spacing slider is noise, not guidance.
+    func quantized(_ keyPath: WritableKeyPath<AirStatKit.Settings, Double>,
+                   step: Double) -> Binding<Double> {
+        Binding(get: { self.settings[keyPath: keyPath] },
+                set: { newValue in
+                    self.update { $0[keyPath: keyPath] = (newValue / step).rounded() * step }
+                })
+    }
+
+    /// Membership in a set, expressed as a toggle.
+    func membership<Element: Hashable>(_ keyPath: WritableKeyPath<AirStatKit.Settings, Set<Element>>,
+                                       _ element: Element) -> Binding<Bool> {
+        Binding(get: { self.settings[keyPath: keyPath].contains(element) },
+                set: { isOn in
+                    self.update {
+                        if isOn { $0[keyPath: keyPath].insert(element) }
+                        else { $0[keyPath: keyPath].remove(element) }
+                    }
+                })
+    }
+}
+
+// MARK: - Materials
+
+/// An AppKit material behind SwiftUI content.
+///
+/// The sidebar needs one: without it the source list and the content area resolve
+/// to the same fill (measured `#353535` for both in dark mode, in the real window),
+/// so the two columns read as one undifferentiated surface. Material is what macOS
+/// uses to separate them, and it is not reachable from SwiftUI alone.
+struct VisualEffect: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+    }
+}
+
+/// Applies the grouped-form look this window uses: the window's own fill behind the
+/// scroll view, so SwiftUI's section boxes read as raised against it.
+///
+/// Without this the section fill lands within two levels of the background —
+/// measured `#F5F5F5` boxes on an `#F7F7F7` window, a contrast ratio of about
+/// 1.03:1 — and the grouping exists only as a hairline border.
+extension View {
+    func settingsFormStyle() -> some View {
+        formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Availability
+
+/// What this particular Mac can actually report.
+///
+/// The app's promise is never to show a number it does not have, and that promise
+/// has to start here: offering "CPU Temperature" with the same affordance as
+/// "CPU Usage" on a machine whose sensors are unreadable buys the user a readout
+/// that will be a dash forever, with nothing to explain why.
+///
+/// Every answer comes from the live snapshot — a source that reported
+/// `.unsupported`, or a value present but missing the specific field a readout
+/// needs (a desktop with no battery, a fanless Mac, Apple Silicon core frequency).
+struct MetricAvailability {
+    private let snapshot: SystemSnapshot
+
+    init(snapshot: SystemSnapshot) { self.snapshot = snapshot }
+
+    /// Nil when the readout will work here; otherwise why it will not.
+    func note(for metric: MenuBarMetric) -> String? {
+        if let sourceNote = note(for: metric.requiredSource) { return sourceNote }
+        switch metric {
+        case .cpuFrequency:
+            // No public API reports Apple Silicon core frequency, so this readout
+            // cannot work on any current Mac.
+            return "macOS does not report core frequency on Apple Silicon."
+        case .cpuTemperature:
+            guard let thermal = snapshot.thermal.value else { return nil }
+            if thermal.cpuCelsius == nil {
+                return thermal.sensorsUnavailableReason ?? "No readable CPU temperature sensor."
+            }
+        case .fanSpeed:
+            if let thermal = snapshot.thermal.value, thermal.fans.isEmpty {
+                return "This Mac has no fans."
+            }
+        case .battery, .batteryTime:
+            if let power = snapshot.power.value, power.percentage == nil {
+                return "This Mac has no battery."
+            }
+        case .systemPower:
+            if let power = snapshot.power.value, power.systemWatts == nil {
+                return "This Mac does not report system power draw."
+            }
+        case .gpuUsage:
+            if let gpu = snapshot.gpu.value, gpu.primary?.utilization == nil {
+                return "No GPU utilisation source on this Mac."
+            }
+        default:
+            return nil
+        }
+        return nil
+    }
+
+    func note(for module: PanelModule) -> String? { note(for: module.requiredSource) }
+
+    func note(for metric: ThresholdMetric) -> String? { note(for: metric.requiredSource) }
+
+    /// Only `.unsupported` counts. A sample that failed this cycle or a permission
+    /// the user can still grant are both recoverable, and greying a control the
+    /// user could fix would be its own kind of dishonesty.
+    private func note(for source: CollectorID) -> String? {
+        let state: MetricFailure?
+        switch source {
+        case .cpu: state = snapshot.cpu.failure
+        case .memory: state = snapshot.memory.failure
+        case .gpu: state = snapshot.gpu.failure
+        case .network: state = snapshot.network.failure
+        case .disk: state = snapshot.disk.failure
+        case .power: state = snapshot.power.failure
+        case .thermal: state = snapshot.thermal.failure
+        case .processes: state = snapshot.processes.failure
+        case .system: state = snapshot.system.failure
+        }
+        guard let state, state.isPermanent else { return nil }
+        return state.message
+    }
+}
+
+/// The snapshot the settings window reasons about: live when the app is running,
+/// and a named fixture set when it is not.
+///
+/// The fixture is selectable so the offscreen renderer can reach the states that
+/// matter here — `degraded` (a Mac missing sensors) and `pending` (nothing sampled
+/// yet) — which it otherwise never sees, leaving every scenario render identical.
+@MainActor
+enum SettingsPreview {
+    static var fixtureScenario: OffscreenRenderer.Scenario {
+        guard let raw = ProcessInfo.processInfo.environment["AIRSTAT_PREVIEW_SCENARIO"],
+              let scenario = OffscreenRenderer.Scenario(rawValue: raw) else { return .nominal }
+        return scenario
+    }
+
+    static func snapshot(_ engine: MetricsEngine?) -> SystemSnapshot {
+        engine?.snapshot ?? fixtureScenario.snapshot
+    }
+
+    static func history(_ engine: MetricsEngine?) -> MetricHistory {
+        engine?.history ?? fixtureScenario.history
+    }
+}
+
+/// A row's trailing "not available here" marker, with the reason on hover and in
+/// the accessibility value rather than as a wall of text next to every control.
+struct UnavailableBadge: View {
+    let reason: String
+
+    var body: some View {
+        HStack(spacing: Design.Space.xs) {
+            Image(systemName: "minus.circle")
+            Text("Unavailable")
+        }
+        .font(.callout)
+        .foregroundStyle(Design.Palette.tertiaryText)
+        .help(reason)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Not available on this Mac")
+        .accessibilityValue(reason)
+    }
+}
+
+// MARK: - Shared controls
+
+/// Restores one subtree to its shipped defaults, behind a confirmation because it
+/// is the only irreversible control in the window.
+struct RestoreDefaultsButton: View {
+    let settings: SettingsStore
+    let section: SettingsStore.SettingsSection
+    let title: String
+
+    @State private var isConfirming = false
+
+    var body: some View {
+        Button("Restore Defaults") { isConfirming = true }
+            .confirmationDialog("Restore \(title) settings to their defaults?",
+                                isPresented: $isConfirming) {
+                Button("Restore Defaults", role: .destructive) {
+                    settings.resetSection(section)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Only the \(title) section is affected. Other settings are left alone.")
+            }
+            .accessibilityHint("Restores the \(title) section to its default values")
+    }
+}
+
+/// Explanatory text under a control, styled as a macOS settings footnote.
+struct SettingsFootnote: View {
+    private let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(Design.Palette.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            // A Form row aligns its trailing content, and a footer inherits that:
+            // without both of these the prose sets ragged-left and reads as a value
+            // rather than an aside.
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// An inline caution — a login-item failure, a shortcut conflict, a setting the
+/// model refused to apply. Never used for anything the user can simply undo.
+struct SettingsCaution: View {
+    private let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color(nsColor: .systemOrange))
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.callout)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Warning. \(text)")
+    }
+}
+
+// MARK: - Row lists
+
+/// A bordered box of rows, standing in for `List`.
+///
+/// `List` is an `NSTableView`, and an `NSTableView` draws nothing when a windowless
+/// process asks a view tree to cache its display — which would leave every
+/// reorderable list in this window blank in the only review tool the project has.
+/// A stack of rows draws the same thing, renders offscreen, and keeps drag
+/// reordering through `draggable`/`dropDestination`.
+struct SettingsListBox<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(spacing: 0) { content }
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                    .strokeBorder(Design.Palette.separator)
+            }
+    }
+}
+
+/// One row of a `SettingsListBox`, with its separator, selection fill and the
+/// insertion line shown while something is dragged over it.
+struct SettingsListRow<Content: View>: View {
+    var isFirst: Bool = false
+    var isSelected: Bool = false
+    var isDropTarget: Bool = false
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if isDropTarget {
+                Rectangle()
+                    .fill(Design.Palette.accent)
+                    .frame(height: 2)
+            } else if !isFirst {
+                Divider()
+            }
+            content
+                .padding(.horizontal, Design.Space.m)
+                .padding(.vertical, Design.Space.s)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(isSelected ? Design.Palette.accent.opacity(0.18) : Color.clear)
+                .contentShape(Rectangle())
+        }
+    }
+}
+
+/// A module's glyph and name, with the glyph in a fixed box.
+///
+/// SF Symbols differ in width, and `Label` leaves that difference in the layout —
+/// a column of module names that starts at nine different x positions reads as
+/// sloppy long before anyone works out why.
+struct ModuleLabel: View {
+    let module: PanelModule
+
+    var body: some View {
+        HStack(spacing: Design.Space.s) {
+            Image(systemName: module.symbolName)
+                .frame(width: 18, alignment: .center)
+                .foregroundStyle(Design.Palette.metric(module.requiredSource))
+            Text(module.label)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(module.label)
+    }
+}
+
+/// Move-up / move-down buttons for a reorderable list.
+///
+/// Drag reordering is the fast path but it is not reachable from the keyboard and
+/// invisible to VoiceOver, so every reorderable list also carries these.
+struct ReorderControls: View {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let itemLabel: String
+    let move: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: Design.Space.xxs) {
+            Button { move(-1) } label: { Image(systemName: "chevron.up") }
+                .disabled(!canMoveUp)
+                .help("Move \(itemLabel) up")
+                .accessibilityLabel("Move \(itemLabel) up")
+            Button { move(1) } label: { Image(systemName: "chevron.down") }
+                .disabled(!canMoveDown)
+                .help("Move \(itemLabel) down")
+                .accessibilityLabel("Move \(itemLabel) down")
+        }
+        .buttonStyle(.borderless)
+        .font(.caption)
+        .foregroundStyle(Design.Palette.secondaryText)
+    }
+}
+
+// MARK: - Value formatting
+
+/// Labels for the fixed option lists the settings model exposes. Kept here so the
+/// same duration reads identically in every pane.
+enum SettingsLabels {
+
+    static func interval(_ seconds: TimeInterval) -> String {
+        if seconds < 1 { return "\(Int(seconds * 1000)) ms" }
+        if seconds == 1 { return "1 second" }
+        return "\(Int(seconds)) seconds"
+    }
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        if seconds <= 0 { return "Immediately" }
+        if seconds < 60 { return "\(Int(seconds)) seconds" }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return minutes == 1 ? "1 minute" : "\(minutes) minutes" }
+        let hours = Int(seconds / 3600)
+        return hours == 1 ? "1 hour" : "\(hours) hours"
+    }
+
+    static func points(_ value: Double) -> String { "\(Int(value.rounded())) pt" }
+
+    static func percent(_ fraction: Double) -> String { "\(Int((fraction * 100).rounded()))%" }
+}
+
+// MARK: - Live menu bar preview
+
+/// The real status item view, hosted in the settings window.
+///
+/// Wrapping `MenuBarContentView` rather than reimplementing it is the whole point:
+/// the preview is the same drawing code, the same measurement, and the same model
+/// the menu bar itself uses, so it cannot drift away from what the user will see.
+struct MenuBarPreview: NSViewRepresentable {
+    let model: MenuBarRenderModel
+
+    func makeNSView(context: Context) -> MenuBarContentView {
+        let view = MenuBarContentView(frame: .zero)
+        view.update(with: model)
+        return view
+    }
+
+    func updateNSView(_ view: MenuBarContentView, context: Context) {
+        view.update(with: model)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: MenuBarContentView,
+                      context: Context) -> CGSize? {
+        nsView.intrinsicContentSize
+    }
+}
+
+/// Presents the preview on a surface that reads as a menu bar, because contrast in
+/// the menu bar is the thing being judged and a preview on a form background would
+/// misrepresent it.
+struct MenuBarPreviewStrip: View {
+    let model: MenuBarRenderModel
+    let isEmpty: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: Design.Space.xl)
+            if isEmpty {
+                Text("No readouts are enabled.")
+                    .font(.callout)
+                    .foregroundStyle(Design.Palette.secondaryText)
+            } else {
+                MenuBarPreview(model: model)
+            }
+            Image(systemName: "wifi").foregroundStyle(Design.Palette.tertiaryText)
+                .padding(.leading, Design.Space.l)
+            Image(systemName: "battery.75").foregroundStyle(Design.Palette.tertiaryText)
+                .padding(.leading, Design.Space.m)
+            Text(Date(), format: .dateTime.weekday(.abbreviated).hour().minute())
+                .foregroundStyle(Design.Palette.tertiaryText)
+                .padding(.leading, Design.Space.l)
+            Spacer(minLength: Design.Space.xl)
+        }
+        .font(.system(size: Design.MenuBar.valueFontSize))
+        .padding(.vertical, Design.Space.m)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: Design.Radius.card,
+                                                                  style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Menu bar preview")
+        .accessibilityValue(isEmpty ? "No readouts enabled" : model.accessibilityDescription)
+    }
+}

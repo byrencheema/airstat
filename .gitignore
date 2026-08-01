@@ -1,0 +1,16 @@
+.build/
+.build-*/
+*.xcresult
+
+# SwiftPM incremental-build artifacts. These land in the repo root rather than under
+# .build when a build is driven with an explicit output directory, so the wildcards
+# above do not catch them.
+*.o
+*.d
+*.swiftdeps
+*.swiftdeps~
+
+# Output of `AirStat --render`.
+render/
+
+.DS_Store
