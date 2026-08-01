@@ -215,6 +215,17 @@ public enum Design {
     public enum MenuBar {
         public static let valueFontSize: CGFloat = 12
         public static let captionFontSize: CGFloat = 9
+        /// Type for an item that stacks its caption above its number.
+        ///
+        /// Smaller than the single-line sizes because two rows have to share the bar's
+        /// ~22pt. At the full sizes the two cap-height boxes plus a gap come to 16pt
+        /// before any breathing room, which leaves the pair crowding the menu bar's
+        /// edges; at these, 12.6pt, which sits comfortably.
+        public static let stackedValueFontSize: CGFloat = 10
+        public static let stackedCaptionFontSize: CGFloat = 8
+        /// Vertical gap between the two rows, between their cap-height boxes rather
+        /// than their line boxes.
+        public static let stackedRowGap: CGFloat = 1
         public static let graphWidth: CGFloat = 34
         public static let graphHeight: CGFloat = 11
         public static let horizontalInset: CGFloat = 3

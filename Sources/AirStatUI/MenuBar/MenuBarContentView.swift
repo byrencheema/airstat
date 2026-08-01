@@ -148,6 +148,10 @@ public final class MenuBarContentView: NSView {
         var secondaryGlyph: CGFloat = 0
         var secondaryValue: CGFloat = 0
         var indicator: CGFloat = 0
+        /// Width of the caption-above-value column, when the item stacks. The caption
+        /// and the number share this one slot instead of taking a slot each, so the
+        /// item is as wide as the wider of the two rather than as wide as their sum.
+        var stack: CGFloat = 0
 
         var width: CGFloat {
             var total: CGFloat = 0
@@ -161,6 +165,7 @@ public final class MenuBarContentView: NSView {
             append(symbol, after: Layout.partGap)
             append(caption, after: Layout.partGap)
             append(graph, after: Layout.partGap)
+            append(stack, after: Layout.partGap)
             append(primaryGlyph, after: Layout.partGap)
             append(primaryValue, after: primaryGlyph > 0 ? Layout.glyphGap : Layout.partGap)
             append(secondaryGlyph, after: Layout.pairGap)
@@ -170,10 +175,22 @@ public final class MenuBarContentView: NSView {
         }
     }
 
+    /// Whether an item draws its caption above its number rather than beside it.
+    ///
+    /// Only when the user has asked for a caption on an item that draws a number:
+    /// there is nothing to stack otherwise. A paired readout keeps its two directions
+    /// side by side — that pair is already one logical row, and stacking it under a
+    /// caption would be three rows of type in a 22-point bar.
+    private func isStacked(_ item: MenuBarItemRender) -> Bool {
+        item.caption != nil && item.style.drawsValue && !item.isUnavailable
+    }
+
     private func geometry(for item: MenuBarItemRender, symbol: NSImage?,
                           model: MenuBarRenderModel) -> Geometry {
         var geometry = Geometry()
-        if let caption = item.caption { geometry.caption = width(caption, role: .caption) }
+        if let caption = item.caption, !isStacked(item) {
+            geometry.caption = width(caption, role: .caption)
+        }
 
         // An unavailable readout collapses to one dash: no graph of history that is not
         // there, no empty bar that reads as zero, and no width reserved for a number
@@ -199,6 +216,20 @@ public final class MenuBarContentView: NSView {
         }
 
         guard item.style.drawsValue else { return geometry }
+
+        // A stacked item's number is set one size down and shares its column with the
+        // caption above it, so both rows are measured here and the wider one sets the
+        // width. Measuring the caption at its stacked size matters: at the single-line
+        // size "TEMP" is wider than "52°C" and would have reserved a column the number
+        // then sat loose inside.
+        if isStacked(item), let caption = item.caption {
+            let value = reservedWidth(item.primary, model: model, role: .stackedValue)
+            let glyph = glyphWidth(item.primary, role: .stackedValue)
+            let bottom = glyph > 0 ? glyph + Layout.glyphGap + value : value
+            geometry.stack = max(width(caption, role: .stackedCaption), bottom)
+            return geometry
+        }
+
         geometry.primaryGlyph = glyphWidth(item.primary)
         geometry.primaryValue = reservedWidth(item.primary, model: model)
         if let secondary = item.secondary {
@@ -219,18 +250,19 @@ public final class MenuBarContentView: NSView {
     /// time a value gains a digit or crosses from KB to MB. The live string is still
     /// folded in, so a `widestText` that turns out not to be widest clips nothing — it
     /// only costs a reflow, which is the failure we can see and fix.
-    private func reservedWidth(_ line: MenuBarLine, model: MenuBarRenderModel) -> CGFloat {
-        let measured = width(line.valueText, role: .value)
+    private func reservedWidth(_ line: MenuBarLine, model: MenuBarRenderModel,
+                               role: FontRole = .value) -> CGFloat {
+        let measured = width(line.valueText, role: role)
         guard model.usesFixedWidth else { return measured }
-        return max(measured, width(line.widestText, role: .value))
+        return max(measured, width(line.widestText, role: role))
     }
 
     /// Direction glyphs are set at the value's own size, not the caption's. One line
     /// means one type size on it; a second, smaller size reads as a third kind of thing
     /// rather than as part of the number it belongs to.
-    private func glyphWidth(_ line: MenuBarLine?) -> CGFloat {
+    private func glyphWidth(_ line: MenuBarLine?, role: FontRole = .value) -> CGFloat {
         guard let glyph = line?.glyph else { return 0 }
-        return width(glyph, role: .value)
+        return width(glyph, role: role)
     }
 
     // MARK: Drawing
@@ -306,6 +338,13 @@ public final class MenuBarContentView: NSView {
             x += geometry.graph
         }
 
+        if geometry.stack > 0, let caption = item.caption {
+            gap(Layout.partGap)
+            drawStack(item, caption: caption, in: x, width: geometry.stack,
+                      solid: solid, muted: muted, scale: scale, context: context)
+            x += geometry.stack
+        }
+
         if geometry.primaryValue > 0 {
             gap(Layout.partGap)
             if geometry.primaryGlyph > 0, let glyph = item.primary.glyph {
@@ -363,6 +402,45 @@ public final class MenuBarContentView: NSView {
     /// centring the line box would sit them visibly high.
     private func centeredBaseline(for role: FontRole) -> CGFloat {
         bounds.midY - fonts[role].capHeight / 2
+    }
+
+    /// Draws a caption above its number, both centred in the column the two share.
+    ///
+    /// The pair is centred on the item's midline as one block, measured by cap heights
+    /// for the same reason `centeredBaseline` uses them: neither row has descenders, so
+    /// centring line boxes would leave the block sitting visibly high in the bar.
+    ///
+    /// Centred rather than aligned to one edge. The caption is almost never the same
+    /// width as the number under it, and hanging both off the leading edge left "TEMP"
+    /// and "52°C" looking like two unrelated items that happened to be adjacent.
+    private func drawStack(_ item: MenuBarItemRender, caption: String, in x: CGFloat,
+                           width columnWidth: CGFloat, solid: CGColor, muted: CGColor,
+                           scale: CGFloat, context: CGContext) {
+        let captionCap = fonts[.stackedCaption].capHeight
+        let valueCap = fonts[.stackedValue].capHeight
+        let total = captionCap + Design.MenuBar.stackedRowGap + valueCap
+        let captionBaseline = bounds.midY + total / 2 - captionCap
+        let valueBaseline = bounds.midY - total / 2
+
+        let captionWidth = width(caption, role: .stackedCaption)
+        drawText(caption, role: .stackedCaption,
+                 x: x + (columnWidth - captionWidth) / 2, baseline: captionBaseline,
+                 color: muted, scale: scale, context: context)
+
+        let valueText = item.primary.valueText
+        let glyph = item.primary.glyph
+        let glyphWidth = glyph.map { width($0, role: .stackedValue) } ?? 0
+        let valueWidth = width(valueText, role: .stackedValue)
+        let rowWidth = glyphWidth > 0 ? glyphWidth + Layout.glyphGap + valueWidth : valueWidth
+        var valueX = x + (columnWidth - rowWidth) / 2
+
+        if let glyph, glyphWidth > 0 {
+            drawText(glyph, role: .stackedValue, x: valueX, baseline: valueBaseline,
+                     color: muted, scale: scale, context: context)
+            valueX += glyphWidth + Layout.glyphGap
+        }
+        drawText(valueText, role: .stackedValue, x: valueX, baseline: valueBaseline,
+                 color: solid, scale: scale, context: context)
     }
 
     /// The colours one draw pass works in.
@@ -615,11 +693,17 @@ public final class MenuBarContentView: NSView {
         case value
         /// Opt-in captions. The only text on the bar that is not a number.
         case caption
+        /// The same two, one size down, for an item drawing its caption above its
+        /// number instead of beside it.
+        case stackedValue
+        case stackedCaption
     }
 
     private struct FontSet {
         let value: NSFont
         let caption: NSFont
+        let stackedValue: NSFont
+        let stackedCaption: NSFont
 
         init(monospacedDigits: Bool) {
             let size = Design.MenuBar.valueFontSize
@@ -627,12 +711,20 @@ public final class MenuBarContentView: NSView {
                 ? .monospacedDigitSystemFont(ofSize: size, weight: .regular)
                 : .systemFont(ofSize: size, weight: .regular)
             caption = .systemFont(ofSize: Design.MenuBar.captionFontSize, weight: .medium)
+            let stacked = Design.MenuBar.stackedValueFontSize
+            stackedValue = monospacedDigits
+                ? .monospacedDigitSystemFont(ofSize: stacked, weight: .regular)
+                : .systemFont(ofSize: stacked, weight: .regular)
+            stackedCaption = .systemFont(ofSize: Design.MenuBar.stackedCaptionFontSize,
+                                         weight: .medium)
         }
 
         subscript(role: FontRole) -> NSFont {
             switch role {
             case .value: return value
             case .caption: return caption
+            case .stackedValue: return stackedValue
+            case .stackedCaption: return stackedCaption
             }
         }
     }
