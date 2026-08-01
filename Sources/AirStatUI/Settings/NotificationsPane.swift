@@ -24,8 +24,6 @@ struct NotificationsPane: View {
                        isOn: settings.binding(\.notifications.isEnabled))
             } header: {
                 Text("Notifications")
-            } footer: {
-                SettingsFootnote("A rule fires only once its condition has held continuously for the whole sustained duration — a one-second spike while an app launches is not an alert. If the value drops back below the threshold at any point, the clock starts over.")
             }
 
             Section {
@@ -34,8 +32,6 @@ struct NotificationsPane: View {
                 }
             } header: {
                 Text("Rules")
-            } footer: {
-                SettingsFootnote("Each rule keeps its own collector running, so switching one on has a cost even when the panel is closed.")
             }
 
             Section {

@@ -16,7 +16,6 @@ struct PanelSummary {
     /// battery states something untrue before the reader gets to the words.
     var icon: String?
     var symbol: String?
-    var severity: MetricSeverity = .normal
     var emphasis: Emphasis = .measurement
     /// The history the header trace draws. `ChartScale` decides the domain from the
     /// key, so a module never picks its own axis.
@@ -45,42 +44,21 @@ struct PanelModuleView: View {
 
     /// What the panel fills its bars and core cells with.
     ///
-    /// Deliberately not `Palette.metric`. Nine modules each in their own hue is nine
-    /// colours competing at rest, and it leaves nothing louder to say "this one needs
-    /// you" — which is the only thing colour is for here. So the panel is drawn in the
-    /// label greys, and saturation is reserved for `Palette.severity`.
-    ///
-    /// `severityText`, not `severity`, even though these are fills.
-    ///
-    /// The distinction between the two ramps assumes colour sits *behind* content. A
-    /// bar has nothing on top of it — the fill is the content, and it is what carries
-    /// the reading. `systemYellow` on a light panel measures 1.34:1, so a disk at 97%
-    /// full draws its most important state in a colour that cannot be seen. The text
-    /// ramp is the one tuned to be read.
-    static func barTint(_ severity: MetricSeverity) -> Color {
-        Design.Palette.severityText(severity)
-    }
+    /// The label colour, not `Palette.metric`. Nine modules each in their own hue is
+    /// nine colours competing in a 340pt window, and the bar is the content here —
+    /// nothing sits on top of it — so it takes the colour text takes.
+    static let barTint = Design.Palette.primaryText
 
-    var tint: Color { Self.barTint(.normal) }
+    var tint: Color { Self.barTint }
 
     /// Charts sit in the header beside the headline number, so they stay a step quieter
     /// than the bars: a stroked line reads at secondary weight where a filled bar does
     /// not.
     var traceTint: Color { Design.Palette.secondaryText }
 
-    /// The severity a module is currently reporting, used to colour its glyph so the
-    /// module in trouble is findable without reading any of the numbers.
-    private var headlineSeverity: MetricSeverity { summary.severity }
-
-    /// A module glyph is a thin shape, so it takes `severityText` rather than the fill
-    /// ramp. At rest it stays secondary: `severityText(.normal)` is the full label
-    /// colour, which would put nine icons at full strength and undo the point of
-    /// reserving weight for the module that needs it.
-    private var iconColor: Color {
-        headlineSeverity == .normal
-            ? Design.Palette.secondaryText
-            : Design.Palette.severityText(headlineSeverity)
-    }
+    /// A module glyph is a thin shape beside a heading it does not compete with, so it
+    /// sits at secondary weight — nine icons at full strength is a wall.
+    private var iconColor: Color { Design.Palette.secondaryText }
 
     /// Width of the header trace. Set by `Sparkline`'s peak caption rather than by the
     /// line: on a data-derived scale that caption is the axis, and a trace too narrow
@@ -196,7 +174,7 @@ struct PanelModuleView: View {
                 }
                 Text(value)
                     .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
-                    .foregroundStyle(Design.Palette.severityText(summary.severity))
+                    .foregroundStyle(Design.Palette.primaryText)
                     .lineLimit(1)
                     .contentTransition(.numericText())
                 // The qualifier sits in a reserved column so it cannot push the number.
@@ -235,13 +213,11 @@ struct PanelModuleView: View {
         case .cpu:
             guard let cpu = engine.cpu.value else { return PanelSummary() }
             return PanelSummary(value: formatter.percent(cpu.total.busy),
-                                severity: .forUtilization(cpu.total.busy),
                                 series: .cpuTotal)
         case .memory:
             guard let memory = engine.memory.value else { return PanelSummary() }
             return PanelSummary(value: formatter.memory(memory.usedBytes),
                                 caption: "used",
-                                severity: .forUtilization(memory.usedFraction),
                                 series: .memoryUsed)
         case .gpu:
             guard let gpu = engine.gpu.value, let device = gpu.primary else { return PanelSummary() }
@@ -252,7 +228,6 @@ struct PanelModuleView: View {
                                 // Device identity belongs in the expanded detail: it is
                                 // the only caption long enough to break the column.
                                 caption: nil,
-                                severity: .forUtilization(utilization),
                                 series: .gpuUtilization)
         case .network:
             guard let network = engine.network.value else { return PanelSummary() }
@@ -264,11 +239,8 @@ struct PanelModuleView: View {
                                 series: .networkDownload)
         case .disk:
             guard let disk = engine.disk.value, let root = disk.rootVolume else { return PanelSummary() }
-            let remaining = root.totalBytes > 0
-                ? Double(root.availableBytes) / Double(root.totalBytes) : 0
             return PanelSummary(value: formatter.storage(root.availableBytes),
-                                caption: "free",
-                                severity: .forRemaining(remaining))
+                                caption: "free")
         case .battery:
             guard let power = engine.power.value else { return PanelSummary() }
             guard power.hasBattery, let percentage = power.percentage else {
@@ -277,20 +249,17 @@ struct PanelModuleView: View {
                                     emphasis: .state)
             }
             return PanelSummary(value: formatter.percentValue(percentage),
-                                caption: power.isCharging ? "charging" : nil,
-                                severity: power.isCharging ? .normal : .forRemaining(percentage / 100))
+                                caption: power.isCharging ? "charging" : nil)
         case .thermal:
             guard let thermal = engine.thermal.value else { return PanelSummary() }
             guard let celsius = thermal.cpuCelsius else {
                 return PanelSummary(value: thermal.pressure.label,
-                                    severity: Self.severity(of: thermal.pressure),
                                     emphasis: .state)
             }
             // No trace: charts here are drawn from a zero baseline, and on that axis a
             // die swinging 44–58 °C is a flat line four fifths of the way up. The
             // caption would be the only thing saying anything.
-            return PanelSummary(value: formatter.temperature(celsius),
-                                severity: .forTemperature(celsius))
+            return PanelSummary(value: formatter.temperature(celsius))
         case .processes:
             guard let processes = engine.processes.value else { return PanelSummary() }
             return PanelSummary(value: formatter.count(processes.totalProcessCount),
@@ -301,14 +270,4 @@ struct PanelModuleView: View {
         }
     }
 
-    /// Thermal pressure is its own scale; mapping it onto the shared severity ramp is
-    /// what lets one colour language cover every module.
-    static func severity(of pressure: ThermalPressure) -> MetricSeverity {
-        switch pressure {
-        case .nominal: return .normal
-        case .fair: return .elevated
-        case .serious: return .high
-        case .critical: return .critical
-        }
-    }
 }

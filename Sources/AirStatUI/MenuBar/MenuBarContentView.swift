@@ -476,23 +476,11 @@ public final class MenuBarContentView: NSView {
             if item.isUnavailable {
                 return base.withAlphaComponent(base.alphaComponent * Layout.unavailableAlpha)
             }
-            switch item.colorMode {
-            case .threshold:
-                // Thresholds carry information the shape cannot, and outrank a chosen
-                // colour: a readout is red because something is wrong, and a user who
-                // picked their own colour for CPU did not thereby ask to stop being
-                // told. At `.normal` there is nothing to say, so the choice applies.
-                switch item.severity {
-                case .normal: break
-                case .elevated: return .systemYellow
-                case .high: return .systemOrange
-                case .critical: return .systemRed
-                }
-            case .automatic:
-                break
-            }
             // The menu bar is a monochrome surface and stays one by default. A colour
-            // appears here only because the user went and chose one for this metric.
+            // appears here only because the user went and chose one for this metric,
+            // and it does not change afterwards: a readout that turned yellow, then
+            // orange, then red as the number climbed was saying what the number
+            // already said, in the one place on screen with no room to say anything.
             return item.tint.map(NSColor.init(themeColor:))
         }
     }

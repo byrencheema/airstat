@@ -23,8 +23,6 @@ struct GeneralPane: View {
                        isOn: settings.binding(\.general.pausesOnLowPower))
             } header: {
                 Text("Sampling")
-            } footer: {
-                SettingsFootnote("How often AirStat reads the machine. Faster costs more energy, and a collector nothing is displaying is not sampled at all.")
             }
 
             Section {
@@ -46,8 +44,6 @@ struct GeneralPane: View {
                 Toggle("Show the percent sign", isOn: settings.binding(\.general.showsPercentSign))
             } header: {
                 Text("Units")
-            } footer: {
-                SettingsFootnote("Memory is always shown in binary units, because that is what Apple reports — 18 GB of RAM is 19,327,352,832 bytes.")
             }
 
             ShortcutsFormSections(settings: settings)
@@ -64,8 +60,6 @@ struct GeneralPane: View {
                        isOn: settings.binding(\.general.fetchesPublicIP))
             } header: {
                 Text("Startup & Privacy")
-            } footer: {
-                SettingsFootnote("Login is registered through Login Items, where you can also revoke it. The IP lookup is the only part of AirStat that touches the network — it asks an external service, which necessarily sees your address. Everything else is read from this Mac and never leaves it.")
             }
 
             Section {

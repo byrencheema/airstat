@@ -27,10 +27,6 @@ struct MenuBarPane: View {
                     .listRowInsets(EdgeInsets())
             } header: {
                 Text("Preview")
-            } footer: {
-                SettingsFootnote(engine == nil
-                    ? "Drawn by the menu bar's own code from sample data, so it matches what you will see."
-                    : "Live, drawn by the menu bar's own code — this is exactly what is in your menu bar right now.")
             }
 
             Section {
@@ -38,8 +34,6 @@ struct MenuBarPane: View {
                 readoutListControls
             } header: {
                 Text("Readouts")
-            } footer: {
-                SettingsFootnote(readoutFootnote)
             }
 
             if let index = selectedIndex {
@@ -65,8 +59,6 @@ struct MenuBarPane: View {
                        isOn: settings.binding(\.menuBar.usesCombinedItem))
             } header: {
                 Text("Layout")
-            } footer: {
-                SettingsFootnote("Reserving width stops the menu bar shuffling when a number gains a digit. Separate items can be rearranged with ⌘-drag in the menu bar itself.")
             }
 
             Section {
@@ -86,8 +78,6 @@ struct MenuBarPane: View {
                 }
             } header: {
                 Text("Quiet Mode")
-            } footer: {
-                SettingsFootnote("Readouts below the threshold disappear until something happens. Rates with no maximum — network, disk — are never hidden.")
             }
 
             Section {
@@ -185,7 +175,7 @@ struct MenuBarPane: View {
                         // a readout this machine cannot serve may work on the next.
                         Text(availability.note(for: metric) == nil
                              ? metric.label
-                             : "\(metric.label) — unavailable here")
+                             : "\(metric.label) (unavailable here)")
                     }
                 }
             } label: {
@@ -227,12 +217,6 @@ struct MenuBarPane: View {
             }
             .pickerStyle(.menu)
 
-            Picker("Colour", selection: colorBinding(index: index)) {
-                ForEach(ColorMode.allCases, id: \.self) { mode in
-                    Text(mode.label).tag(mode)
-                }
-            }
-
             Toggle("Show caption", isOn: captionBinding(index: index))
 
             if item.style == .graph || item.style == .textAndGraph {
@@ -251,24 +235,9 @@ struct MenuBarPane: View {
             Text(item.metric.label)
         } footer: {
             if let reason = availability.note(for: item.metric) {
-                SettingsCaution("\(reason) This readout will show a dash until you use a Mac that can report it.")
-            } else {
-                SettingsFootnote(detailFootnote(for: item))
+                SettingsCaution(reason)
             }
         }
-    }
-
-    private func detailFootnote(for item: MenuBarItemConfig) -> String {
-        let styles = item.metric.supportedStyles
-        var text = ""
-        if styles.count < MenuBarDisplayStyle.allCases.count {
-            text += "\(item.metric.label) offers only \(styles.map(\.label).joined(separator: ", ")) — "
-            text += styles.contains(.bar)
-                ? "a graph would have nothing meaningful to plot."
-                : "it has no fixed maximum, so a bar or ring would be meaningless. "
-        }
-        text += " Captions add a short label such as CPU next to the value. Colour by threshold turns the value yellow, orange then red as it climbs; monochrome is the menu bar's native look."
-        return text.trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: Model access
@@ -311,16 +280,6 @@ struct MenuBarPane: View {
                 })
     }
 
-    private func colorBinding(index: Int) -> Binding<ColorMode> {
-        Binding(get: { items[index].colorMode },
-                set: { mode in
-                    settings.update { s in
-                        guard s.menuBar.items.indices.contains(index) else { return }
-                        s.menuBar.items[index].colorMode = mode
-                    }
-                })
-    }
-
     private func captionBinding(index: Int) -> Binding<Bool> {
         Binding(get: { items[index].showsCaption },
                 set: { shows in
@@ -339,15 +298,6 @@ struct MenuBarPane: View {
                         s.menuBar.items[index].graphWidth = (width / 2).rounded() * 2
                     }
                 })
-    }
-
-    /// Explains the store's refusal to leave the menu bar empty before the user
-    /// meets it as a checkbox that will not turn off.
-    private var readoutFootnote: String {
-        guard let last = lastEnabledItem else {
-            return "Drag to reorder, or use the arrows. Turning a readout off leaves it configured but hides it."
-        }
-        return "Drag to reorder, or use the arrows. \(last.metric.label) cannot be switched off — one readout has to stay visible, because clicking it is how you open AirStat."
     }
 
     /// The item the store would refuse to disable, or nil when more than one is on.

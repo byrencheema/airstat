@@ -114,21 +114,28 @@ extension SettingsStore {
 
 // MARK: - Materials
 
-/// An AppKit material, with the app's glass sheen, behind SwiftUI content.
+/// An AppKit material behind SwiftUI content.
 ///
 /// The sidebar needs a material of its own: without one the source list and the
 /// content area resolve to the same fill (measured `#353535` for both in dark mode,
 /// in the real window), so the two columns read as one undifferentiated surface.
 /// Material is what macOS uses to separate them, and it is not reachable from
 /// SwiftUI alone.
+///
+/// Plain, not `GlassBackdropView`. The glass sheen is for surfaces that float over
+/// other apps; inside a settings window it is decoration on a system control.
 struct VisualEffect: NSViewRepresentable {
     let material: NSVisualEffectView.Material
 
-    func makeNSView(context: Context) -> GlassBackdropView {
-        GlassBackdropView(material: material)
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
     }
 
-    func updateNSView(_ view: GlassBackdropView, context: Context) {
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
         view.material = material
     }
 }

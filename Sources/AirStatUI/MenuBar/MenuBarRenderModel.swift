@@ -36,7 +36,6 @@ public struct MenuBarLine: Equatable, Sendable {
 public struct MenuBarItemRender: Equatable, Sendable {
     public var id: UUID
     public var style: MenuBarDisplayStyle
-    public var colorMode: ColorMode
     /// The colour the user chose for this metric, or nil if they have left it alone.
     ///
     /// Carried as data rather than resolved in the view from the theme, because the
@@ -51,7 +50,6 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var secondary: MenuBarLine?
     /// 0...1 for bar/ring styles. Nil when the metric has no natural maximum.
     public var fraction: Double?
-    public var severity: MetricSeverity
     /// Set when the metric is unavailable; the view greys the readout and shows a dash.
     public var isUnavailable: Bool
     public var symbolName: String?
@@ -59,20 +57,18 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var graphWidth: Double?
     public var accessibilityLabel: String
 
-    public init(id: UUID, style: MenuBarDisplayStyle, colorMode: ColorMode,
+    public init(id: UUID, style: MenuBarDisplayStyle,
                 tint: ThemeColor? = nil, caption: String?,
                 primary: MenuBarLine, secondary: MenuBarLine? = nil, fraction: Double?,
-                severity: MetricSeverity, isUnavailable: Bool, symbolName: String?,
+                isUnavailable: Bool, symbolName: String?,
                 graphWidth: Double? = nil, accessibilityLabel: String) {
         self.id = id
         self.style = style
-        self.colorMode = colorMode
         self.tint = tint
         self.caption = caption
         self.primary = primary
         self.secondary = secondary
         self.fraction = fraction
-        self.severity = severity
         self.isUnavailable = isUnavailable
         self.symbolName = symbolName
         self.graphWidth = graphWidth
@@ -130,7 +126,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         var valueText = dash
         var fraction: Double?
         var seriesKey: SeriesKey?
-        var severity = MetricSeverity.normal
         var unavailable = true
         // Named, not a bare "unavailable": VoiceOver reads the whole item as one string,
         // and three anonymous "unavailable"s in a row say nothing about what is missing.
@@ -145,7 +140,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 let busy = cpu.total.busy
                 fraction = busy
                 valueText = formatter.percent(busy)
-                severity = .forUtilization(busy)
                 unavailable = false
                 accessibilityValue = "CPU \(valueText)"
             }
@@ -155,7 +149,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let temp = snapshot.thermal.value?.cpuCelsius {
                 valueText = formatter.temperature(temp)
                 fraction = min(max(temp / 110, 0), 1)
-                severity = .forTemperature(temp)
                 unavailable = false
                 accessibilityValue = "CPU temperature \(valueText)"
             }
@@ -169,7 +162,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let mem = snapshot.memory.value {
                 fraction = mem.usedFraction
                 valueText = formatter.percent(mem.usedFraction)
-                severity = .forUtilization(mem.usedFraction)
                 unavailable = false
                 accessibilityValue = "Memory \(valueText)"
             }
@@ -179,7 +171,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let mem = snapshot.memory.value {
                 fraction = mem.pressureFraction
                 valueText = formatter.percent(mem.pressureFraction)
-                severity = .forUtilization(mem.pressureFraction)
                 unavailable = false
                 accessibilityValue = "Memory pressure \(valueText)"
             }
@@ -189,7 +180,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let util = snapshot.gpu.value?.primary?.utilization {
                 fraction = util
                 valueText = formatter.percent(util)
-                severity = .forUtilization(util)
                 unavailable = false
                 accessibilityValue = "GPU \(valueText)"
             }
@@ -218,7 +208,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             return finish(config: config, caption: nil,
                           primary: MenuBarLine(glyph: "↓", valueText: valueText,
                                                widestText: rateWidest, series: pair.0),
-                          secondary: secondary, fraction: nil, severity: severity,
+                          secondary: secondary, fraction: nil,
                           unavailable: unavailable, accessibility: accessibilityValue,
                           settings: settings)
 
@@ -254,7 +244,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             return finish(config: config, caption: nil,
                           primary: MenuBarLine(glyph: "R", valueText: valueText,
                                                widestText: rateWidest, series: pair.0),
-                          secondary: secondary, fraction: nil, severity: severity,
+                          secondary: secondary, fraction: nil,
                           unavailable: unavailable, accessibility: accessibilityValue,
                           settings: settings)
 
@@ -263,7 +253,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.storage(root.availableBytes)
                 let freeFraction = root.totalBytes > 0 ? Double(root.availableBytes) / Double(root.totalBytes) : 0
                 fraction = 1 - freeFraction
-                severity = .forRemaining(freeFraction)
                 unavailable = false
                 accessibilityValue = "Disk free \(valueText)"
             }
@@ -272,7 +261,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let power = snapshot.power.value, let pct = power.percentage {
                 fraction = pct / 100
                 valueText = formatter.percentValue(pct)
-                severity = .forRemaining(pct / 100)
                 unavailable = false
                 accessibilityValue = power.isCharging ? "Battery \(valueText) charging" : "Battery \(valueText)"
             }
@@ -317,7 +305,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         return finish(config: config, caption: caption(for: config),
                       primary: MenuBarLine(valueText: valueText, widestText: widest,
                                            series: series),
-                      secondary: nil, fraction: fraction, severity: severity,
+                      secondary: nil, fraction: fraction,
                       unavailable: unavailable, accessibility: accessibilityValue,
                       settings: settings)
     }
@@ -327,7 +315,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                primary: MenuBarLine,
                                secondary: MenuBarLine?,
                                fraction: Double?,
-                               severity: MetricSeverity,
                                unavailable: Bool,
                                accessibility: String,
                                settings: Settings) -> MenuBarItemRender? {
@@ -338,7 +325,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         return MenuBarItemRender(
             id: config.id,
             style: config.style,
-            colorMode: config.colorMode,
             // Only a colour the user actually picked. The shipped metric colours stay
             // out of the menu bar: it is a monochrome surface that Apple's own extras
             // never colour, and a CPU readout that is blue because blue is what CPU
@@ -348,7 +334,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             primary: primary,
             secondary: secondary,
             fraction: fraction,
-            severity: severity,
             isUnavailable: unavailable,
             symbolName: symbolName(for: config.metric),
             graphWidth: config.graphWidth,

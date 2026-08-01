@@ -167,7 +167,7 @@ struct ShortcutRecorderField: View {
         guard !flags.intersection(significant).isEmpty else {
             // A bare key, or Shift plus a key, would fire while the user is typing
             // anywhere on the system.
-            rejection = "Include ⌘, ⌃ or ⌥ — a shortcut without one would fire while typing."
+            rejection = "Include ⌘, ⌃ or ⌥."
             return
         }
 

@@ -24,8 +24,6 @@ struct ShortcutsFormSections: View {
                 }
             } header: {
                 Text("Shortcuts")
-            } footer: {
-                SettingsFootnote("Click one, then press the combination. It needs ⌘, ⌃ or ⌥ in it, or it would fire while you were typing in another app. AirStat cannot tell whether another app already has a combination — macOS gives no way to ask.")
             }
 
             if !conflicts.isEmpty {
@@ -35,8 +33,6 @@ struct ShortcutsFormSections: View {
                     }
                 } header: {
                     Text("Shortcut Conflicts")
-                } footer: {
-                    SettingsFootnote("Two actions cannot share one combination — whichever registered first wins, and which that is is not something you can predict.")
                 }
             }
         }

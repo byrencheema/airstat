@@ -53,12 +53,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.title = "AirStat Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
-        // The window's own opaque fill would sit in front of the materials the root
-        // view draws, so the translucency would stop at the content edge and the
-        // titlebar would stay a flat grey bar above a window you can see through.
-        window.titlebarAppearsTransparent = true
-        window.backgroundColor = .clear
-        window.isOpaque = false
+        // Stock window chrome. A transparent titlebar over a cleared background was
+        // what squared off the corners and made this stop looking like a Mac settings
+        // window: the frame view rounds and masks the content it owns, and it only
+        // owns it while the window is drawing itself normally.
         window.setContentSize(SettingsRootView.windowSize)
         window.setFrameAutosaveName("AirStatSettingsWindow")
         return window
@@ -104,12 +102,11 @@ struct SettingsRootView: View {
                 .background(VisualEffect(material: .sidebar))
             pane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Was an opaque `windowBackgroundColor`, then `.underWindowBackground`.
-                // `.hudWindow` is the most transparent material AppKit ships, which is
-                // what makes this column read as glass rather than as tinted grey, and
-                // it still sits a level apart from the sidebar beside it so the two
-                // columns stay differentiated.
-                .background(VisualEffect(material: .hudWindow))
+                // The material macOS gives a window's content area, beside the one it
+                // gives a source list. Glass was tried here and does not belong: this
+                // is a settings window, not a floating panel, and Apple does not make
+                // one you can see the desktop through.
+                .background(VisualEffect(material: .contentBackground))
         }
         .frame(width: windowWidth, height: windowHeight)
         .onAppear { onPaneChange?(tab) }

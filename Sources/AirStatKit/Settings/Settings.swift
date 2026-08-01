@@ -76,32 +76,6 @@ public enum AppearanceMode: String, Sendable, Codable, CaseIterable, Equatable, 
     }
 }
 
-/// How a menu bar readout is coloured.
-///
-/// Two modes, not three. There used to be a separate "Metric Colour" that painted a
-/// readout in the metric's *shipped* identity colour; it is gone because picking a
-/// colour in Appearance is now what makes a readout coloured, and a mode meaning
-/// "use a colour I never chose" was the one nobody could predict from the outside.
-public enum ColorMode: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    /// Follows the menu bar's own tint — including the inverted appearance under a
-    /// highlight or a dark wallpaper — unless the user has chosen a colour for this
-    /// metric, which is then what the readout is drawn in.
-    ///
-    /// The raw value stays `monochrome` so files written by earlier builds decode
-    /// onto it; a file saying `tinted` falls back here too, which is where that mode
-    /// went.
-    case automatic = "monochrome"
-    /// Yellow → orange → red as the value crosses its thresholds.
-    case threshold
-
-    public var label: String {
-        switch self {
-        case .automatic: return "Automatic"
-        case .threshold: return "By Threshold"
-        }
-    }
-}
-
 // MARK: - Menu bar
 
 /// A single readout the user can place in the menu bar.
@@ -193,20 +167,18 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
     public var metric: MenuBarMetric
     public var style: MenuBarDisplayStyle
     public var isEnabled: Bool
-    public var colorMode: ColorMode
     /// Width in points for graph styles. Nil uses the style's natural width.
     public var graphWidth: Double?
     /// Show the short caption ("CPU") next to the value.
     public var showsCaption: Bool
 
     public init(id: UUID = UUID(), metric: MenuBarMetric, style: MenuBarDisplayStyle = .text,
-                isEnabled: Bool = true, colorMode: ColorMode = .automatic,
+                isEnabled: Bool = true,
                 graphWidth: Double? = nil, showsCaption: Bool = false) {
         self.id = id
         self.metric = metric
         self.style = style
         self.isEnabled = isEnabled
-        self.colorMode = colorMode
         self.graphWidth = graphWidth
         self.showsCaption = showsCaption
     }
@@ -223,7 +195,7 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, metric, style, isEnabled, colorMode, graphWidth, showsCaption
+        case id, metric, style, isEnabled, graphWidth, showsCaption
     }
 
     public init(from decoder: Decoder) throws {
@@ -232,7 +204,6 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
         metric = c.value(.metric, or: MenuBarMetric.cpuUsage)
         style = c.value(.style, or: MenuBarDisplayStyle.text)
         isEnabled = c.value(.isEnabled, or: true)
-        colorMode = c.value(.colorMode, or: ColorMode.automatic)
         graphWidth = try? c.decodeIfPresent(Double.self, forKey: .graphWidth)
         showsCaption = c.value(.showsCaption, or: false)
     }

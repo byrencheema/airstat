@@ -251,12 +251,10 @@ struct PanelDetailEntry: Identifiable, Equatable {
     var id: String { label }
     var label: String
     var value: String
-    var severity: MetricSeverity = .normal
 
-    init(_ label: String, _ value: String, severity: MetricSeverity = .normal) {
+    init(_ label: String, _ value: String) {
         self.label = label
         self.value = value
-        self.severity = severity
     }
 }
 
@@ -272,7 +270,7 @@ struct PanelDetailGrid: View {
             ForEach(rows, id: \.first?.id) { row in
                 GridRow {
                     ForEach(row) { entry in
-                        ReadoutRow(entry.label, entry.value, severity: entry.severity)
+                        ReadoutRow(entry.label, entry.value)
                             .frame(maxWidth: .infinity)
                     }
                     // Keeps a trailing odd entry in the left column instead of

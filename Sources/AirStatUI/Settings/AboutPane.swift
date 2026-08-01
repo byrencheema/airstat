@@ -54,8 +54,6 @@ struct AboutPane: View {
                 }
             } header: {
                 Text("This Mac")
-            } footer: {
-                SettingsFootnote("Read from sysctl and the IO registry on this machine. Nothing here is sent anywhere.")
             }
 
             Section {
@@ -82,8 +80,6 @@ struct AboutPane: View {
                 }
             } header: {
                 Text("Settings File")
-            } footer: {
-                SettingsFootnote("Importing replaces every section at once. A key the file gets wrong falls back to its default rather than failing the import, so a file from another version still loads.")
             }
 
             Section {

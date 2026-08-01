@@ -133,8 +133,7 @@ public struct ChartGallery: View {
                     }
                     MetricContent(snapshot.memory) { memory in
                         MetricGauge(fraction: memory.pressureFraction,
-                                    tint: Design.Palette.severity(
-                                        .forUtilization(memory.pressureFraction)),
+                                    tint: Design.Palette.metric(.memory),
                                     label: "Memory pressure",
                                     caption: MetricFormatter().percent(memory.pressureFraction),
                                     style: .arc)

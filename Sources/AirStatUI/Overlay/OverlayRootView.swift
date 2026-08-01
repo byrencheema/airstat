@@ -86,20 +86,17 @@ private struct OverlayModuleView: View {
             case .value(let readout):
                 OverlayHeaderRow(readout: readout)
                 if let fraction = readout.fraction {
-                    // At rest the bar carries the metric's identity colour; once the
-                    // value wants attention the severity ramp takes over.
-                    CapacityBar(fraction: fraction,
-                                tint: readout.severity == .normal
-                                    ? readout.tint
-                                    : Design.Palette.severity(readout.severity),
-                                height: 3)
+                    // The bar carries the metric's identity colour, whatever the value
+                    // is doing: the length is the reading, and a bar that also changed
+                    // hue was saying the same thing twice in a louder voice.
+                    CapacityBar(fraction: fraction, tint: readout.tint, height: 3)
                 }
                 if let secondary = readout.secondary {
                     OverlaySecondaryRow(detail: secondary)
                 }
                 if !isCompact {
                     ForEach(readout.details) { detail in
-                        ReadoutRow(detail.label, detail.value, severity: detail.severity)
+                        ReadoutRow(detail.label, detail.value)
                     }
                 }
             case .failure(let failure):
@@ -131,7 +128,6 @@ private struct OverlayModuleView: View {
         engine.cpu.map { cpu in
             var readout = OverlayReadout(module: module, value: formatter.percent(cpu.total.busy))
             readout.fraction = cpu.total.busy
-            readout.severity = .forUtilization(cpu.total.busy)
             readout.details = [
                 OverlayDetail("user", "User", formatter.percent(cpu.total.user)),
                 OverlayDetail("system", "System", formatter.percent(cpu.total.system)),
@@ -145,12 +141,10 @@ private struct OverlayModuleView: View {
         engine.memory.map { memory in
             var readout = OverlayReadout(module: module, value: formatter.percent(memory.usedFraction))
             readout.fraction = memory.usedFraction
-            readout.severity = .forUtilization(memory.pressureFraction)
             readout.secondary = OverlayDetail("used", "",
                                               "\(formatter.memory(memory.usedBytes)) of \(formatter.memory(memory.totalBytes))")
             readout.details = [
-                OverlayDetail("pressure", "Pressure", formatter.percent(memory.pressureFraction),
-                              severity: .forUtilization(memory.pressureFraction)),
+                OverlayDetail("pressure", "Pressure", formatter.percent(memory.pressureFraction)),
                 OverlayDetail("swap", "Swap", formatter.memory(memory.swapUsedBytes)),
             ]
             return readout
@@ -165,7 +159,6 @@ private struct OverlayModuleView: View {
                 module: module,
                 value: utilization.map { formatter.percent($0) } ?? MetricFormatter.unavailable)
             readout.fraction = utilization
-            readout.severity = utilization.map { .forUtilization($0) } ?? .normal
             if let device, let used = device.vramUsedBytes, let total = device.vramTotalBytes, total > 0 {
                 readout.details = [
                     OverlayDetail("vram", device.memoryLabel,
@@ -202,7 +195,6 @@ private struct OverlayModuleView: View {
                 value: root.map { formatter.percent($0.usedFraction) } ?? MetricFormatter.unavailable)
             readout.fraction = root?.usedFraction
             if let root {
-                readout.severity = .forRemaining(1 - root.usedFraction)
                 readout.secondary = OverlayDetail("free", "", "\(formatter.storage(root.freeBytes)) free")
             }
             readout.details = [
@@ -225,7 +217,6 @@ private struct OverlayModuleView: View {
             var readout = OverlayReadout(module: module,
                                          value: formatter.percentValue(percentage))
             readout.fraction = percentage / 100
-            readout.severity = power.isCharging ? .normal : .forRemaining(percentage / 100)
             readout.secondary = OverlayDetail("state", "", batteryCaption(power))
             readout.details = [
                 OverlayDetail("power", "Draw", formatter.watts(power.batteryWatts)),
@@ -250,7 +241,6 @@ private struct OverlayModuleView: View {
         engine.thermal.map { thermal in
             var readout = OverlayReadout(module: module,
                                          value: formatter.temperature(thermal.cpuCelsius))
-            readout.severity = thermal.cpuCelsius.map { .forTemperature($0) } ?? .normal
             readout.secondary = OverlayDetail("pressure", "", thermal.pressure.label)
             if let fan = thermal.fans.first {
                 readout.details = [OverlayDetail("fan", fan.name, formatter.rpm(fan.currentRPM))]
@@ -307,9 +297,7 @@ private struct OverlayHeaderRow: View {
             if let value = readout.value {
                 SwiftUI.Text(value)
                     .font(Design.Text.value)
-                    .foregroundStyle(readout.severity == .normal
-                                     ? Design.Palette.primaryText
-                                     : Design.Palette.severity(readout.severity))
+                    .foregroundStyle(Design.Palette.primaryText)
                     .lineLimit(1)
                     .contentTransition(.numericText())
             }
@@ -352,13 +340,11 @@ private struct OverlayDetail: Identifiable, Equatable, Sendable {
     let id: String
     let label: String
     let value: String
-    var severity: MetricSeverity = .normal
 
-    init(_ id: String, _ label: String, _ value: String, severity: MetricSeverity = .normal) {
+    init(_ id: String, _ label: String, _ value: String) {
         self.id = id
         self.label = label
         self.value = value
-        self.severity = severity
     }
 }
 
@@ -372,7 +358,6 @@ private struct OverlayReadout: Equatable, Sendable {
     /// `UnavailableNote` — never a zero standing in for a number we do not have.
     var value: String?
     var fraction: Double?
-    var severity: MetricSeverity = .normal
     var secondary: OverlayDetail?
     var details: [OverlayDetail] = []
 

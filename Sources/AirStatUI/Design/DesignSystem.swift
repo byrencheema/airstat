@@ -104,48 +104,6 @@ public enum Design {
             }
         }
 
-        /// Severity ramp for FILLS — bars, badges, glyph backgrounds — where the colour
-        /// sits behind or beside content rather than being read as text.
-        ///
-        /// Deliberately does NOT go green at "normal": a green dot on every idle metric
-        /// is visual noise. Normal is neutral; colour appears only when something wants
-        /// attention.
-        public static func severity(_ severity: MetricSeverity) -> Color {
-            switch severity {
-            case .normal: return Color(nsColor: .secondaryLabelColor)
-            case .elevated: return Color(nsColor: .systemYellow)
-            case .high: return Color(nsColor: .systemOrange)
-            case .critical: return Color(nsColor: .systemRed)
-            }
-        }
-
-        /// Severity ramp for TEXT and thin glyphs.
-        ///
-        /// The fill ramp is unusable as foreground in light mode. Measured against the
-        /// panel's `#F1F1F1` material, `systemYellow` renders at 1.34:1 and
-        /// `systemOrange` at 2.04:1 — so the *worse* the news, the less legible the
-        /// number becomes, which is the opposite of what a severity colour is for.
-        /// These variants darken in light appearance and keep the vivid system colours
-        /// in dark, where they already clear contrast comfortably.
-        public static func severityText(_ severity: MetricSeverity) -> Color {
-            switch severity {
-            case .normal:
-                return Color(nsColor: .labelColor)
-            case .elevated:
-                return Color(nsColor: NSColor(name: nil) { appearance in
-                    appearance.isDark ? .systemYellow : NSColor(srgbRed: 0.62, green: 0.44, blue: 0.00, alpha: 1)
-                })
-            case .high:
-                return Color(nsColor: NSColor(name: nil) { appearance in
-                    appearance.isDark ? .systemOrange : NSColor(srgbRed: 0.72, green: 0.33, blue: 0.00, alpha: 1)
-                })
-            case .critical:
-                return Color(nsColor: NSColor(name: nil) { appearance in
-                    appearance.isDark ? .systemRed : NSColor(srgbRed: 0.75, green: 0.05, blue: 0.10, alpha: 1)
-                })
-            }
-        }
-
         /// Track behind bars, rings and gauges.
         ///
         /// A bar whose track is invisible communicates magnitude while withholding
@@ -253,17 +211,20 @@ extension EnvironmentValues {
 ///
 /// Values are trailing-aligned with monospaced digits so every row in a module forms
 /// a clean right edge, which is what lets the eye scan a column of numbers.
+///
+/// A row used to turn yellow, orange and red as its value climbed. It does not any
+/// more: a number that changes colour as you watch it is the app editorialising about
+/// data the user is perfectly able to read, and nine modules each deciding on their
+/// own when to shout left the panel with no quiet state at all. Colour in AirStat now
+/// means one thing — which metric this is — and the user chooses it.
 public struct ReadoutRow: View {
     private let label: String
     private let value: String
-    private let severity: MetricSeverity
     private let isDimmed: Bool
 
-    public init(_ label: String, _ value: String,
-                severity: MetricSeverity = .normal, isDimmed: Bool = false) {
+    public init(_ label: String, _ value: String, isDimmed: Bool = false) {
         self.label = label
         self.value = value
-        self.severity = severity
         self.isDimmed = isDimmed
     }
 
@@ -277,7 +238,7 @@ public struct ReadoutRow: View {
             Spacer(minLength: Design.Space.m)
             SwiftUI.Text(value)
                 .font(Design.Text.value)
-                .foregroundStyle(valueColor)
+                .foregroundStyle(Design.Palette.primaryText)
                 .lineLimit(1)
                 .contentTransition(.numericText())
         }
@@ -285,10 +246,6 @@ public struct ReadoutRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
         .accessibilityValue(value)
-    }
-
-    private var valueColor: Color {
-        severity == .normal ? Design.Palette.primaryText : Design.Palette.severity(severity)
     }
 }
 

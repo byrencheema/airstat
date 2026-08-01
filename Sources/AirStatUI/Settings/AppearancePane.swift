@@ -38,8 +38,6 @@ struct AppearancePane: View {
                 }
             } header: {
                 Text("Metric Colours")
-            } footer: {
-                SettingsFootnote("A colour you pick is used in that metric's charts and in its menu bar readout. Left alone, charts use the system palette and the menu bar stays monochrome like the rest of the bar.")
             }
 
             Section {
@@ -52,8 +50,6 @@ struct AppearancePane: View {
                          })
             } header: {
                 Text("Accent")
-            } footer: {
-                SettingsFootnote("Selection and the overlay's drag handle. Left alone it follows System Settings.")
             }
 
             Section {
@@ -69,8 +65,6 @@ struct AppearancePane: View {
                 }
             } header: {
                 Text("Charts")
-            } footer: {
-                SettingsFootnote("History lives in memory and is discarded when AirStat quits — \(SettingsLabels.duration(settings.settings.charts.historyDuration)) at \(SettingsLabels.interval(settings.settings.general.updateInterval)) is \(settings.settings.historyCapacity) samples per series.")
             }
 
             Section {

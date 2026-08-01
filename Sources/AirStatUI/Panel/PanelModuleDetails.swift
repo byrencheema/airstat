@@ -98,7 +98,7 @@ extension PanelModuleView {
                 PanelBarRow(label: "Pressure",
                             value: "\(memory.memoryPressure.label) · \(formatter.percent(memory.pressureFraction))",
                             fraction: memory.pressureFraction,
-                            tint: pressureTint(memory.memoryPressure))
+                            tint: PanelModuleView.barTint)
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Swap", formatter.memory(memory.swapUsedBytes)),
                     PanelDetailEntry("Total", formatter.memory(memory.totalBytes)),
@@ -129,14 +129,6 @@ extension PanelModuleView {
                                       value: segment.value,
                                       tint: Design.Palette.primaryText.opacity(shade),
                                       isRemainder: false)
-        }
-    }
-
-    private func pressureTint(_ level: MemoryPressureLevel) -> Color {
-        switch level {
-        case .normal: return PanelModuleView.barTint(.normal)
-        case .warning: return PanelModuleView.barTint(.high)
-        case .critical: return PanelModuleView.barTint(.critical)
         }
     }
 
@@ -241,13 +233,6 @@ extension PanelModuleView {
     private func volumeRow(_ volume: VolumeInfo) -> some View {
         let total = Double(volume.totalBytes)
         let remaining = total > 0 ? Double(volume.availableBytes) / total : 0
-        // `forRemaining`, which the Kit documents as the ramp for "free disk or battery
-        // charge". The complaint it looked inconsistent with CPU was really the mixed
-        // basis above: the row said 97% while the colour came from an 11.5% figure the
-        // user could not see. With one basis the two ramps agree where it matters —
-        // 3% free is critical exactly as 97% busy is — and this one leaves a disk with
-        // 185 GB free uncoloured instead of amber.
-        let severity = MetricSeverity.forRemaining(remaining)
         let occupied = volume.totalBytes > volume.availableBytes
             ? volume.totalBytes - volume.availableBytes : 0
         return VStack(alignment: .leading, spacing: Design.Space.xs) {
@@ -268,7 +253,7 @@ extension PanelModuleView {
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
             }
-            CapacityBar(fraction: 1 - remaining, tint: PanelModuleView.barTint(severity))
+            CapacityBar(fraction: 1 - remaining, tint: PanelModuleView.barTint)
         }
         .accessibilityElement(children: .combine)
     }
@@ -279,7 +264,7 @@ extension PanelModuleView {
         section(engine.power) { power in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 if power.hasBattery, let percentage = power.percentage {
-                    CapacityBar(fraction: percentage / 100, tint: chargeTint(power))
+                    CapacityBar(fraction: percentage / 100, tint: PanelModuleView.barTint)
                 }
                 if let adapter = adapterSummary(power) {
                     ReadoutRow("Adapter", adapter)
@@ -324,13 +309,6 @@ extension PanelModuleView {
         return entries
     }
 
-    private func chargeTint(_ power: PowerSnapshot) -> Color {
-        guard let percentage = power.percentage, !power.isCharging else {
-            return PanelModuleView.barTint(.normal)
-        }
-        return PanelModuleView.barTint(.forRemaining(percentage / 100))
-    }
-
     // MARK: Thermal
 
     private var thermalDetail: some View {
@@ -345,11 +323,9 @@ extension PanelModuleView {
     }
 
     private func thermalEntries(_ thermal: ThermalSnapshot) -> [PanelDetailEntry] {
-        var entries = [PanelDetailEntry("Pressure", thermal.pressure.label,
-                                        severity: PanelModuleView.severity(of: thermal.pressure))]
+        var entries = [PanelDetailEntry("Pressure", thermal.pressure.label)]
         if let gpu = thermal.gpuCelsius {
-            entries.append(PanelDetailEntry("GPU", formatter.temperature(gpu),
-                                            severity: .forTemperature(gpu)))
+            entries.append(PanelDetailEntry("GPU", formatter.temperature(gpu)))
         }
         // Fans are read out rather than gauged: a stopped fan is a normal state on a
         // Mac that is not working hard, and an empty dial next to a healthy machine

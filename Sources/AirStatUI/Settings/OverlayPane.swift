@@ -19,8 +19,6 @@ struct OverlayPane: View {
                 Toggle("Show the overlay", isOn: settings.binding(\.overlay.isEnabled))
             } header: {
                 Text("Overlay")
-            } footer: {
-                SettingsFootnote("A small always-visible window with the readouts you pick. It never takes keyboard focus and never appears in the app switcher.")
             }
 
             Section {
@@ -28,10 +26,6 @@ struct OverlayPane: View {
                 moduleControls
             } header: {
                 Text("Modules")
-            } footer: {
-                SettingsFootnote(overlay.modules.count == 1
-                    ? "Drag to reorder. \(overlay.modules[0].label) cannot be removed — an empty overlay would be an invisible window."
-                    : "Drag to reorder, or use the arrows. Only the modules listed here are drawn, and only their metrics are sampled while the overlay is visible.")
             }
 
             Section {
@@ -64,8 +58,6 @@ struct OverlayPane: View {
                 Toggle("Use compact layout", isOn: settings.binding(\.overlay.isCompact))
             } header: {
                 Text("Placement")
-            } footer: {
-                SettingsFootnote("Custom Position keeps wherever you last dragged it. If that display is disconnected, the overlay returns to the top right rather than vanishing.")
             }
 
             Section {
@@ -95,8 +87,6 @@ struct OverlayPane: View {
                 }
             } header: {
                 Text("Transparency")
-            } footer: {
-                SettingsFootnote("Opacity never goes below 20%, and the faded value is held at or under the normal one — an overlay you cannot see is an overlay you cannot get back.")
             }
 
             Section {
@@ -105,8 +95,6 @@ struct OverlayPane: View {
                 Toggle("Show on all spaces", isOn: settings.binding(\.overlay.showsOnAllSpaces))
             } header: {
                 Text("Behaviour")
-            } footer: {
-                SettingsFootnote("Click-through sends every click beneath the overlay, so you can no longer drag it — switch it off here to move it.")
             }
 
             Section {
