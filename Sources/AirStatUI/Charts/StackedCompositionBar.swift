@@ -57,8 +57,8 @@ public struct StackedCompositionBar: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Design.Space.s) {
-            Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-                draw(in: context, size: size)
+            GeometryReader { proxy in
+                bar(in: proxy.size)
             }
             .frame(height: barHeight)
             if showsLegend { legend }
@@ -70,39 +70,56 @@ public struct StackedCompositionBar: View {
 
     private var total: Double { segments.reduce(0) { $0 + $1.value } }
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
-        var context = context
-        let rect = CGRect(origin: .zero, size: size)
-        let shape = Path(roundedRect: rect, cornerRadius: min(Design.Radius.bar, size.height / 2),
-                         style: .continuous)
+    /// One shape per segment rather than one drawing pass; see `PlotShape` for why
+    /// this is not a `Canvas`.
+    @ViewBuilder
+    private func bar(in size: CGSize) -> some View {
+        let outline = Path(roundedRect: CGRect(origin: .zero, size: size),
+                           cornerRadius: min(Design.Radius.bar, size.height / 2),
+                           style: .continuous)
+        ZStack {
+            PlotShape(outline).fill(Design.Palette.track)
+            if total > 0, size.width > 0 {
+                ZStack {
+                    ForEach(Array(fills(in: size).enumerated()), id: \.offset) { _, fill in
+                        PlotShape(fill.path).fill(fill.tint)
+                    }
+                }
+                // Segments are drawn inside the rounded outline rather than as rounded
+                // shapes of their own, so the bar reads as one object that has been
+                // divided.
+                .clipShape(PlotShape(outline))
+            }
+        }
+    }
 
-        context.fill(shape, with: .color(Design.Palette.track))
-        guard total > 0, size.width > 0 else { return }
+    private struct Fill {
+        let path: Path
+        let tint: Color
+    }
 
-        // Segments are drawn inside the rounded outline rather than as rounded shapes
-        // of their own, so the bar reads as one object that has been divided.
-        context.clip(to: shape)
-
+    private func fills(in size: CGSize) -> [Fill] {
+        var result: [Fill] = []
         var x: CGFloat = 0
         for segment in segments {
             let width = CGFloat(segment.value / total) * size.width
             // A segment that exists must be visible. Below a hairline it would round
             // away to nothing, and "0.3 GB of swap" would look identical to none.
             let drawn = segment.value > 0 ? max(width, Design.Space.hairline) : 0
-            guard drawn > 0 else { continue }
-            if !segment.isRemainder {
-                context.fill(Path(CGRect(x: x, y: 0, width: drawn, height: size.height)),
-                             with: .color(segment.tint))
-                // A hairline gap keeps two adjacent segments of similar weight apart
-                // without needing a border colour that would fight the palette.
-                if drawn > Design.Space.xs {
-                    context.fill(Path(CGRect(x: x + drawn - Design.Space.hairline, y: 0,
-                                             width: Design.Space.hairline, height: size.height)),
-                                 with: .color(Design.Palette.track))
-                }
+            defer { x += width }
+            guard drawn > 0, !segment.isRemainder else { continue }
+            result.append(Fill(path: Path(CGRect(x: x, y: 0, width: drawn, height: size.height)),
+                               tint: segment.tint))
+            // A hairline gap keeps two adjacent segments of similar weight apart
+            // without needing a border colour that would fight the palette.
+            if drawn > Design.Space.xs {
+                result.append(Fill(path: Path(CGRect(x: x + drawn - Design.Space.hairline, y: 0,
+                                                     width: Design.Space.hairline,
+                                                     height: size.height)),
+                                   tint: Design.Palette.track))
             }
-            x += width
         }
+        return result
     }
 
     // MARK: Legend

@@ -49,8 +49,16 @@ public struct MetricGauge: View {
     }
 
     public var body: some View {
-        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-            draw(in: context, size: size)
+        ZStack {
+            // See `PlotShape` for why the dial is two shapes rather than a `Canvas`.
+            Dial(start: start, sweep: sweep, fraction: 1, lineWidth: lineWidth)
+                .stroke(Design.Palette.track, style: stroke)
+            if fraction > 0 {
+                // A round cap already occupies a visible slice of arc, so the smallest
+                // non-zero reading is legible without inflating the sweep it represents.
+                Dial(start: start, sweep: sweep, fraction: fraction, lineWidth: lineWidth)
+                    .stroke(tint, style: stroke)
+            }
         }
         .frame(width: diameter, height: diameter)
         .overlay { captionText }
@@ -75,25 +83,23 @@ public struct MetricGauge: View {
 
     private var sweep: Angle { style == .ring ? .degrees(360) : .degrees(270) }
     private var start: Angle { style == .ring ? .degrees(-90) : .degrees(135) }
+    private var stroke: StrokeStyle { StrokeStyle(lineWidth: lineWidth, lineCap: .round) }
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
-        let inset = lineWidth / 2
-        let radius = min(size.width, size.height) / 2 - inset
-        guard radius > 0 else { return }
-        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-        let stroke = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+    /// The arc itself, inset by half the stroke so the dial stays inside its frame.
+    private struct Dial: Shape {
+        let start: Angle
+        let sweep: Angle
+        let fraction: Double
+        let lineWidth: CGFloat
 
-        var track = Path()
-        track.addArc(center: centre, radius: radius, startAngle: start,
-                     endAngle: start + sweep, clockwise: false)
-        context.stroke(track, with: .color(Design.Palette.track), style: stroke)
-
-        guard fraction > 0 else { return }
-        var value = Path()
-        // A round cap already occupies a visible slice of arc, so the smallest
-        // non-zero reading is legible without inflating the sweep it represents.
-        value.addArc(center: centre, radius: radius, startAngle: start,
-                     endAngle: start + sweep * fraction, clockwise: false)
-        context.stroke(value, with: .color(tint), style: stroke)
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            let radius = min(rect.width, rect.height) / 2 - lineWidth / 2
+            guard radius > 0 else { return path }
+            path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: radius,
+                        startAngle: start, endAngle: start + sweep * fraction,
+                        clockwise: false)
+            return path
+        }
     }
 }

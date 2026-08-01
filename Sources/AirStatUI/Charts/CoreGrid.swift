@@ -39,8 +39,8 @@ public struct CoreGrid: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Design.Space.xs) {
-            Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-                draw(in: context, size: size)
+            GeometryReader { proxy in
+                bars(in: proxy.size)
             }
             .frame(height: height)
             if showsClusterLabels && !clusters.isEmpty {
@@ -78,10 +78,27 @@ public struct CoreGrid: View {
     /// grid fills its frame at any size.
     private static let maximumGap: CGFloat = 6
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
-        var context = context
+    /// Two shapes rather than one drawing pass; see `PlotShape` for why this is not a
+    /// `Canvas`.
+    @ViewBuilder
+    private func bars(in size: CGSize) -> some View {
+        let paths = paths(in: size)
+        ZStack {
+            PlotShape(paths.tracks).fill(Design.Palette.track)
+            // The fills are plain rectangles clipped to the tracks, so a part-filled
+            // core takes the track's rounded floor and gets a flat top — it reads as a
+            // column filling up rather than as a separate lozenge floating inside a slot.
+            PlotShape(paths.fills)
+                .fill(tint)
+                .clipShape(PlotShape(paths.tracks))
+        }
+    }
+
+    private func paths(in size: CGSize) -> (tracks: Path, fills: Path) {
+        var tracks = Path()
+        var fills = Path()
         let groups = clusters
-        guard !groups.isEmpty, size.width > 0 else { return }
+        guard !groups.isEmpty, size.width > 0 else { return (tracks, fills) }
 
         // Lay out in slot units: one slot per core plus a gap slot between clusters,
         // so the cluster break scales with the bars instead of being a magic number.
@@ -89,9 +106,6 @@ public struct CoreGrid: View {
         let slotWidth = size.width / (CGFloat(cores.count) + gaps * 0.6)
         let barWidth = max(slotWidth - min(slotWidth * 0.28, Self.maximumGap), 2)
         let radius = min(barWidth / 2, Design.Radius.bar)
-
-        var tracks = Path()
-        var fills = Path()
         var x: CGFloat = 0
 
         for (groupIndex, group) in groups.enumerated() {
@@ -111,13 +125,7 @@ public struct CoreGrid: View {
             }
             if groupIndex < groups.count - 1 { x += slotWidth * 0.6 }
         }
-
-        context.fill(tracks, with: .color(Design.Palette.track))
-        // The fills are plain rectangles clipped to the tracks, so a part-filled core
-        // takes the track's rounded floor and gets a flat top — it reads as a column
-        // filling up rather than as a separate lozenge floating inside a slot.
-        context.clip(to: tracks)
-        context.fill(fills, with: .color(tint))
+        return (tracks, fills)
     }
 
     private var clusterLabels: some View {

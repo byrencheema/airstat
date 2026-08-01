@@ -30,42 +30,59 @@ struct PanelSparkline: View {
     private static let maximumPoints = 64
 
     var body: some View {
-        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-            guard ring.count >= Design.Chart.minimumPoints else { return }
-            let bounds = verticalBounds
-            guard bounds.upper > bounds.lower else { return }
-
-            let inset = Design.Chart.lineWidth / 2
-            let usableHeight = max(size.height - inset * 2, 1)
-            let step = max(1, ring.count / Self.maximumPoints)
-
-            var indices: [Int] = []
-            indices.reserveCapacity(Self.maximumPoints + 1)
-            var index = 0
-            while index < ring.count {
-                indices.append(index)
-                index += step
-            }
-            if indices.last != ring.count - 1 { indices.append(ring.count - 1) }
-
-            let spacing = size.width / CGFloat(max(indices.count - 1, 1))
-            var line = Path()
-            for (position, sample) in indices.enumerated() {
-                let normalized = (Double(ring[sample]) - bounds.lower) / (bounds.upper - bounds.lower)
-                let clamped = min(max(normalized, 0), 1)
-                let point = CGPoint(x: CGFloat(position) * spacing,
-                                    y: inset + usableHeight * (1 - clamped))
-                position == 0 ? line.move(to: point) : line.addLine(to: point)
-            }
-
-            var fill = line
-            fill.addLine(to: CGPoint(x: size.width, y: size.height))
-            fill.addLine(to: CGPoint(x: 0, y: size.height))
-            fill.closeSubpath()
-            context.fill(fill, with: .color(tint.opacity(Design.Chart.fillOpacity)))
-            context.stroke(line, with: .color(tint), lineWidth: Design.Chart.lineWidth)
+        GeometryReader { proxy in
+            trace(in: proxy.size)
         }
         .accessibilityHidden(true)
+    }
+
+    /// Two shapes over one path build; see `PlotShape` for why this is not a `Canvas`.
+    @ViewBuilder
+    private func trace(in size: CGSize) -> some View {
+        let bounds = verticalBounds
+        if ring.count >= Design.Chart.minimumPoints, bounds.upper > bounds.lower {
+            let line = linePath(in: size, bounds: bounds)
+            ZStack {
+                PlotShape(closing(line, in: size))
+                    .fill(tint.opacity(Design.Chart.fillOpacity))
+                PlotShape(line)
+                    .stroke(tint, lineWidth: Design.Chart.lineWidth)
+            }
+        }
+    }
+
+    private func linePath(in size: CGSize, bounds: (lower: Double, upper: Double)) -> Path {
+        let inset = Design.Chart.lineWidth / 2
+        let usableHeight = max(size.height - inset * 2, 1)
+        let step = max(1, ring.count / Self.maximumPoints)
+
+        var indices: [Int] = []
+        indices.reserveCapacity(Self.maximumPoints + 1)
+        var index = 0
+        while index < ring.count {
+            indices.append(index)
+            index += step
+        }
+        if indices.last != ring.count - 1 { indices.append(ring.count - 1) }
+
+        let spacing = size.width / CGFloat(max(indices.count - 1, 1))
+        var line = Path()
+        for (position, sample) in indices.enumerated() {
+            let normalized = (Double(ring[sample]) - bounds.lower) / (bounds.upper - bounds.lower)
+            let clamped = min(max(normalized, 0), 1)
+            let point = CGPoint(x: CGFloat(position) * spacing,
+                                y: inset + usableHeight * (1 - clamped))
+            position == 0 ? line.move(to: point) : line.addLine(to: point)
+        }
+        return line
+    }
+
+    private func closing(_ line: Path, in size: CGSize) -> Path {
+        var fill = line
+        fill.addLine(to: CGPoint(x: size.width, y: size.height))
+        fill.addLine(to: CGPoint(x: 0, y: size.height))
+        fill.closeSubpath()
+        return fill
     }
 
     private var verticalBounds: (lower: Double, upper: Double) {

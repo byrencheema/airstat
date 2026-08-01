@@ -206,57 +206,128 @@ struct ChartPlot {
 
 // MARK: - Shared drawing
 
-extension GraphicsContext {
+/// An already-built `Path`, wrapped so it can be filled, stroked and clipped as a view.
+///
+/// Every chart in the app draws through this. `Canvas` is the obvious tool for the job
+/// and is the one thing that must not be used here: the first `Canvas` to render
+/// anywhere in the process brings up SwiftUI's Metal renderer, and the GPU arena it
+/// allocates is charged to the app and never handed back. Measured on an M3 Pro, one
+/// `Canvas` in the panel took the process from 12 MB to 112 MB the first time the panel
+/// was opened — 93 MB of `Owned physical footprint (unmapped) (graphics)` plus 3.5 MB
+/// of `IOAccelerator` — and it stayed there for the rest of the session. The same
+/// drawing expressed as shapes costs nothing measurable, because Core Animation
+/// rasterises paths without ever touching the GPU renderer.
+///
+/// The path is built in the coordinate space of the view this is applied to, so its
+/// points are absolute and `path(in:)` ignores the rect it is handed.
+struct PlotShape: Shape {
+    let built: Path
 
-    /// Draw one series in the style the user chose. Kept in one place so a sparkline
-    /// and a detail chart can never disagree about what "filled line" looks like.
-    func drawSeries(_ plot: ChartPlot, tint: Color, style: ChartStyle, smoothed: Bool,
-                    lineWidth: CGFloat = Design.Chart.lineWidth) {
-        guard !plot.isEmpty else { return }
-        guard plot.supportsTrend else {
-            // Dashed, dimmed, and capped with the current-value marker: it states a
-            // level without asserting a direction, and it does not read as a rule
-            // drawn across the chart.
-            stroke(plot.levelPath(),
-                   with: .color(tint.opacity(0.45)),
-                   style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt, dash: [2, 3]))
-            if let last = plot.points.last {
-                fill(ChartLayout.marker(at: CGPoint(x: plot.rect.maxX, y: plot.y(last))),
-                     with: .color(tint))
+    init(_ built: Path) { self.built = built }
+
+    func path(in rect: CGRect) -> Path { built }
+}
+
+/// One series in the style the user chose. Kept in one place so a sparkline and a
+/// detail chart can never disagree about what "filled line" looks like.
+struct SeriesLayer: View {
+    let plot: ChartPlot
+    /// The size of the view the plot was laid out in. Only the gradient needs it, and
+    /// only because SwiftUI resolves gradient stops against the view rather than
+    /// against the plot rect inside it.
+    let size: CGSize
+    let tint: Color
+    let style: ChartStyle
+    let smoothed: Bool
+    var lineWidth: CGFloat = Design.Chart.lineWidth
+
+    var body: some View {
+        if !plot.isEmpty {
+            if plot.supportsTrend {
+                trend
+            } else {
+                level
             }
-            return
-        }
-        switch style {
-        case .bars:
-            fill(plot.barPath(), with: .color(tint))
-        case .filledLine:
-            fill(plot.areaPath(smoothed: smoothed),
-                 with: .linearGradient(
-                    Gradient(colors: [tint.opacity(Design.Chart.fillOpacity * 2),
-                                      tint.opacity(0)]),
-                    startPoint: CGPoint(x: plot.rect.midX, y: plot.rect.minY),
-                    endPoint: CGPoint(x: plot.rect.midX, y: plot.rect.maxY)))
-            stroke(plot.linePath(smoothed: smoothed), with: .color(tint),
-                   style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-        case .line:
-            stroke(plot.linePath(smoothed: smoothed), with: .color(tint),
-                   style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
         }
     }
 
-    func drawGrid(_ plot: ChartPlot, divisions: Int = 4, interiorOnly: Bool = false) {
-        stroke(plot.gridPath(divisions: divisions, interiorOnly: interiorOnly),
-               with: .color(Design.Palette.primaryText.opacity(Design.Chart.gridOpacity)),
-               lineWidth: Design.Space.hairline)
+    /// Dashed, dimmed, and capped with the current-value marker: it states a level
+    /// without asserting a direction, and it does not read as a rule drawn across the
+    /// chart.
+    private var level: some View {
+        ZStack {
+            PlotShape(plot.levelPath())
+                .stroke(tint.opacity(0.45),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt, dash: [2, 3]))
+            if let last = plot.points.last {
+                PlotShape(ChartLayout.marker(at: CGPoint(x: plot.rect.maxX, y: plot.y(last))))
+                    .fill(tint)
+            }
+        }
     }
 
-    /// The "nothing sampled yet" state: a baseline, drawn deliberately, so an empty
-    /// chart reads as a chart waiting for data rather than as a broken one.
-    func drawEmptyBaseline(in rect: CGRect) {
+    private var trend: some View {
+        ZStack {
+            switch style {
+            case .bars:
+                PlotShape(plot.barPath()).fill(tint)
+            case .filledLine:
+                PlotShape(plot.areaPath(smoothed: smoothed)).fill(areaGradient)
+                linePath
+            case .line:
+                linePath
+            }
+        }
+    }
+
+    private var linePath: some View {
+        PlotShape(plot.linePath(smoothed: smoothed))
+            .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round,
+                                             lineJoin: .round))
+    }
+
+    /// Anchored to the plot rect rather than to the view. On a 28-point sparkline the
+    /// two differ by the 2-point top inset, which is 7 % of the ramp — enough to make
+    /// the fill visibly paler at the peak than the same chart at detail height.
+    private var areaGradient: LinearGradient {
+        let height = max(size.height, 1)
+        return LinearGradient(
+            gradient: Gradient(colors: [tint.opacity(Design.Chart.fillOpacity * 2),
+                                        tint.opacity(0)]),
+            startPoint: UnitPoint(x: 0.5, y: plot.rect.minY / height),
+            endPoint: UnitPoint(x: 0.5, y: plot.rect.maxY / height))
+    }
+}
+
+/// Horizontal gridlines for a plot.
+struct GridLayer: View {
+    let plot: ChartPlot
+    var divisions: Int = 4
+    var interiorOnly: Bool = false
+
+    var body: some View {
+        PlotShape(plot.gridPath(divisions: divisions, interiorOnly: interiorOnly))
+            .stroke(Design.Palette.primaryText.opacity(Design.Chart.gridOpacity),
+                    lineWidth: Design.Space.hairline)
+    }
+}
+
+/// The "nothing sampled yet" state: a baseline, drawn deliberately, so an empty chart
+/// reads as a chart waiting for data rather than as a broken one.
+struct EmptyBaseline: View {
+    let rect: CGRect
+
+    var body: some View {
+        PlotShape(path)
+            .stroke(Design.Palette.track,
+                    style: StrokeStyle(lineWidth: Design.Chart.lineWidth, lineCap: .round,
+                                       dash: [2, 4]))
+    }
+
+    private var path: Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY - Design.Space.hairline))
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - Design.Space.hairline))
-        stroke(path, with: .color(Design.Palette.track),
-               style: StrokeStyle(lineWidth: Design.Chart.lineWidth, lineCap: .round, dash: [2, 4]))
+        return path
     }
 }

@@ -117,8 +117,8 @@ public struct DetailChart: View {
     // MARK: Plot
 
     private var plot: some View {
-        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-            draw(in: context, size: size)
+        GeometryReader { proxy in
+            marks(in: proxy.size)
         }
         .frame(height: height)
         .overlay(alignment: .topLeading) { boundLabel }
@@ -126,37 +126,36 @@ public struct DetailChart: View {
         .overlay { if !hasSamples { emptyNote } }
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
+    /// One layer per mark rather than one drawing pass. See `PlotShape` for why this
+    /// is not a `Canvas`.
+    @ViewBuilder
+    private func marks(in size: CGSize) -> some View {
         let rect = ChartLayout.plotRect(in: size)
-        guard rect.width > 1, rect.height > 1 else { return }
-
-        guard hasSamples else {
-            context.drawEmptyBaseline(in: rect)
-            return
-        }
-
-        let scale = self.scale
-        var plots: [ChartPlot] = []
-        plots.reserveCapacity(series.count)
-        for item in series {
-            plots.append(ChartPlot(rect: rect, scale: scale, samples: item.samples))
-        }
-
-        if settings.showsGrid, let first = plots.first {
-            context.drawGrid(first)
-        }
-        // Drawn back to front so the first series — the one the module is really
-        // about — ends up on top of any companion series.
-        for index in plots.indices.reversed() {
-            context.drawSeries(plots[index], tint: series[index].tint,
-                               style: settings.style, smoothed: settings.smoothsCurves)
-        }
-        if settings.showsValueLabels {
-            for index in plots.indices where plots[index].supportsTrend {
-                if let last = plots[index].points.last {
-                    context.fill(ChartLayout.marker(at: CGPoint(x: rect.maxX,
-                                                                y: plots[index].y(last))),
-                                 with: .color(series[index].tint))
+        if rect.width > 1, rect.height > 1 {
+            if !hasSamples {
+                EmptyBaseline(rect: rect)
+            } else {
+                let scale = self.scale
+                let plots = series.map { ChartPlot(rect: rect, scale: scale, samples: $0.samples) }
+                ZStack {
+                    if settings.showsGrid, let first = plots.first {
+                        GridLayer(plot: first)
+                    }
+                    // Drawn back to front so the first series — the one the module is
+                    // really about — ends up on top of any companion series.
+                    ForEach(Array(plots.enumerated()).reversed(), id: \.offset) { index, plot in
+                        SeriesLayer(plot: plot, size: size, tint: series[index].tint,
+                                    style: settings.style, smoothed: settings.smoothsCurves)
+                    }
+                    if settings.showsValueLabels {
+                        ForEach(Array(plots.enumerated()), id: \.offset) { index, plot in
+                            if plot.supportsTrend, let last = plot.points.last {
+                                PlotShape(ChartLayout.marker(at: CGPoint(x: rect.maxX,
+                                                                         y: plot.y(last))))
+                                    .fill(series[index].tint)
+                            }
+                        }
+                    }
                 }
             }
         }

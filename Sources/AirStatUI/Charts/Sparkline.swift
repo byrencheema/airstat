@@ -26,8 +26,8 @@ public struct Sparkline: View {
             if !series.stats.isEmpty && (scale.isDerived || scale.isExplicit) {
                 scaleCaption
             }
-            Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-                draw(in: context, size: size)
+            GeometryReader { proxy in
+                plot(in: proxy.size)
             }
         }
         .frame(height: height)
@@ -76,29 +76,33 @@ public struct Sparkline: View {
             .fixedSize(horizontal: fixed, vertical: false)
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
+    /// One layer per mark rather than one drawing pass. See `PlotShape` for why this
+    /// is not a `Canvas`.
+    @ViewBuilder
+    private func plot(in size: CGSize) -> some View {
         let rect = ChartLayout.plotRect(in: size)
-        guard rect.width > 1, rect.height > 1 else { return }
-
-        guard !series.stats.isEmpty else {
-            context.drawEmptyBaseline(in: rect)
-            return
-        }
-
-        let scale = self.scale
-        let plot = ChartPlot(rect: rect, scale: scale, samples: series.samples)
-
-        // A midline only means something against a fixed domain. On a derived scale
-        // "half of the window peak" is not a fact about the machine.
-        if settings.showsGrid && !scale.isDerived {
-            context.drawGrid(plot, divisions: 2, interiorOnly: true)
-        }
-        context.drawSeries(plot, tint: series.tint, style: settings.style,
-                           smoothed: settings.smoothsCurves)
-
-        if settings.showsValueLabels, plot.supportsTrend, let last = plot.points.last {
-            context.fill(ChartLayout.marker(at: CGPoint(x: rect.maxX, y: plot.y(last))),
-                         with: .color(series.tint))
+        if rect.width > 1, rect.height > 1 {
+            if series.stats.isEmpty {
+                EmptyBaseline(rect: rect)
+            } else {
+                let scale = self.scale
+                let plot = ChartPlot(rect: rect, scale: scale, samples: series.samples)
+                ZStack {
+                    // A midline only means something against a fixed domain. On a
+                    // derived scale "half of the window peak" is not a fact about the
+                    // machine.
+                    if settings.showsGrid && !scale.isDerived {
+                        GridLayer(plot: plot, divisions: 2, interiorOnly: true)
+                    }
+                    SeriesLayer(plot: plot, size: size, tint: series.tint,
+                                style: settings.style, smoothed: settings.smoothsCurves)
+                    if settings.showsValueLabels, plot.supportsTrend,
+                       let last = plot.points.last {
+                        PlotShape(ChartLayout.marker(at: CGPoint(x: rect.maxX, y: plot.y(last))))
+                            .fill(series.tint)
+                    }
+                }
+            }
         }
     }
 }
