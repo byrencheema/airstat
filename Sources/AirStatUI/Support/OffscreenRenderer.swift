@@ -262,6 +262,12 @@ private struct SettingsPreviewHost: View {
         // all four scenario renders were byte-identical.
         SettingsRootView(settings: PreviewEngine.store(request),
                          engine: PreviewEngine.make(request))
+            // The window's glass, stood in for the same way the panel's is: its real
+            // `NSVisualEffectView` draws nothing offscreen, so without this the whole
+            // settings render is content floating on transparency.
+            .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
+                                                  style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))
     }
 }
 

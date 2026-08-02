@@ -49,14 +49,41 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             window?.title = tab.label
         }
         window.delegate = self
-        window.contentViewController = NSHostingController(rootView: root)
         window.title = "AirStat Settings"
-        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
-        // Stock window chrome. A transparent titlebar over a cleared background was
-        // what squared off the corners and made this stop looking like a Mac settings
-        // window: the frame view rounds and masks the content it owns, and it only
-        // owns it while the window is drawing itself normally.
+
+        // The same glass the click-down panel is made of, so the two surfaces read as
+        // one app rather than as a floating panel and a stock preferences window.
+        //
+        // A translucent window has to be non-opaque with no fill of its own, or the
+        // window's own background sits in front of the material and the translucency
+        // stops at the content edge. That is also what squares the corners off: the
+        // frame view only rounds and masks the content while the window draws itself
+        // normally. So the rounding comes back here, from the backdrop's own layer —
+        // which is exactly how `PanelWindow` gets its corners.
+        window.titlebarAppearsTransparent = true
+        // The pane's name is in the source list next to it, selected. Repeating it in
+        // a titlebar the panel does not have is the one thing that would still say
+        // "settings window".
+        window.titleVisibility = .hidden
+        window.isOpaque = false
+        window.backgroundColor = .clear
+
+        let backdrop = GlassBackdropView(material: .hudWindow,
+                                         cornerRadius: Design.Radius.panel,
+                                         state: .active)
+        let hosting = NSHostingView(rootView: root)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: backdrop.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+        ])
+        window.contentView = backdrop
+
         window.setContentSize(SettingsRootView.windowSize)
         window.setFrameAutosaveName("AirStatSettingsWindow")
         return window
@@ -85,7 +112,15 @@ struct SettingsRootView: View {
 
     /// Fixed rather than resizable, so the offscreen renderer measures the same
     /// window the user gets. Each pane scrolls its own form.
-    static let windowSize = NSSize(width: 760, height: 560)
+    ///
+    /// Taller than the 560 it was: the content view now runs under the titlebar, and
+    /// the strip the traffic lights sit in is height the panes used to have.
+    static let windowSize = NSSize(width: 760, height: 588)
+
+    /// Clearance for the traffic lights, which float over the content now that the
+    /// titlebar draws nothing. Content starts below it rather than scrolling under it:
+    /// a form row sliding behind three buttons is worse than a band of plain glass.
+    private static let titlebarInset: CGFloat = 28
 
     init(settings: SettingsStore, engine: MetricsEngine? = nil, initialTab: SettingsTab? = nil,
          onPaneChange: ((SettingsTab) -> Void)? = nil) {
@@ -99,15 +134,19 @@ struct SettingsRootView: View {
         HStack(spacing: 0) {
             sidebar
                 .frame(width: SettingsRootView.sidebarWidth)
-                .background(VisualEffect(material: .sidebar))
+            // Neither column carries a material of its own any more: the window is a
+            // single sheet of glass and two materials laid over it would be two
+            // different glasses. What separated the columns was the difference between
+            // those materials, so a rule takes over the job — the same inset hairline
+            // the panel divides its modules with.
+            Rectangle()
+                .fill(Design.Palette.separator)
+                .frame(width: Design.Space.hairline)
+                .accessibilityHidden(true)
             pane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // The material macOS gives a window's content area, beside the one it
-                // gives a source list. Glass was tried here and does not belong: this
-                // is a settings window, not a floating panel, and Apple does not make
-                // one you can see the desktop through.
-                .background(VisualEffect(material: .contentBackground))
         }
+        .padding(.top, SettingsRootView.titlebarInset)
         .frame(width: windowWidth, height: windowHeight)
         .onAppear { onPaneChange?(tab) }
         .onChange(of: tab) { _, newValue in
