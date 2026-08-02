@@ -13,4 +13,7 @@
 # Output of `AirStat --render`.
 render/
 
+# Superseded by site/benchmark.html, which is the tracked copy.
+benchmark-report.html
+
 .DS_Store
