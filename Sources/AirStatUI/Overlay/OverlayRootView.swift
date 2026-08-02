@@ -287,7 +287,12 @@ private struct OverlayHeaderRow: View {
         HStack(spacing: Design.Space.s) {
             Image(systemName: readout.symbol)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(readout.tint)
+                // The glyph belongs to the title beside it, not to the measurement, so
+                // it takes the title's colour. A metric's colour is for the things that
+                // *are* the metric — this module's bar, its charts, its number in the
+                // menu bar — and a coloured icon on a grey label was the app disagreeing
+                // with itself about which of the two the colour meant.
+                .foregroundStyle(Design.Palette.secondaryText)
                 .frame(width: 11)
             SwiftUI.Text(readout.title)
                 .font(Design.Text.sectionHeader)

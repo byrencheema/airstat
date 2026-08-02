@@ -785,18 +785,20 @@ public struct ThemeColor: Sendable, Codable, Equatable, Hashable {
 /// picked. So an untouched install stores nothing and keeps following the system;
 /// only a colour the user deliberately chose is written down.
 public struct ThemeSettings: Sendable, Codable, Equatable {
-    /// Overrides the system accent colour used for selection and the overlay's
-    /// grab handle.
-    public var accent: ThemeColor?
     /// Per-metric identity colours, keyed by `CollectorID.rawValue`.
     ///
     /// Keyed by the raw string rather than by `CollectorID` so a collector that is
     /// renamed or removed in a later build leaves an ignorable entry behind instead
     /// of failing the whole decode.
+    ///
+    /// The one thing this type stores. The accent colour was editable here too, and
+    /// should not have been: selection is a system-wide choice the user already made
+    /// in System Settings, and an app that quietly disagrees with it is not theming
+    /// itself, it is ignoring them. A previously stored `accent` key decodes to
+    /// nothing and is dropped on the next save.
     public var metrics: [String: ThemeColor]
 
-    public init(accent: ThemeColor? = nil, metrics: [String: ThemeColor] = [:]) {
-        self.accent = accent
+    public init(metrics: [String: ThemeColor] = [:]) {
         self.metrics = metrics
     }
 
@@ -806,11 +808,32 @@ public struct ThemeSettings: Sendable, Codable, Equatable {
         metrics[id.rawValue] = color
     }
 
-    private enum CodingKeys: String, CodingKey { case accent, metrics }
+    /// Puts every metric on one colour, or back on the colours the app ships with.
+    ///
+    /// Nil clears the whole dictionary rather than writing nine copies of a default:
+    /// an absent entry is what makes a metric follow Apple's semantic colour through
+    /// appearance and contrast changes, and a stored copy of that colour would not.
+    public mutating func setAllColors(_ color: ThemeColor?) {
+        guard let color else { metrics.removeAll(); return }
+        for id in CollectorID.allCases { metrics[id.rawValue] = color }
+    }
+
+    /// The single colour every metric is currently set to, or nil if any is on its
+    /// default or differs from the rest.
+    public var uniformColor: ThemeColor? {
+        var shared: ThemeColor?
+        for id in CollectorID.allCases {
+            guard let color = metrics[id.rawValue] else { return nil }
+            if let shared, shared != color { return nil }
+            shared = color
+        }
+        return shared
+    }
+
+    private enum CodingKeys: String, CodingKey { case metrics }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        accent = try? c.decodeIfPresent(ThemeColor.self, forKey: .accent)
         metrics = c.value(.metrics, or: [:])
     }
 }

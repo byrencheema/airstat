@@ -27,6 +27,24 @@ struct AppearancePane: View {
             }
 
             Section {
+                // Setting nine metrics to the same colour one row at a time is nine
+                // trips through the colour wheel to express one decision — "I want
+                // this app in my colour" — so that decision gets its own control.
+                // It sits above the individual rows because it overwrites all of
+                // them, and a control that reaches past the rows below it should not
+                // be filed among them.
+                ColorRow(label: "All Metrics",
+                         symbol: "circle.hexagongrid.fill",
+                         current: theme.uniformColor.map(Color.init(themeColor:))
+                             ?? Design.Palette.primaryText,
+                         // Any override at all, so this row can clear a set of nine
+                         // different colours and not only nine matching ones.
+                         isOverridden: !theme.metrics.isEmpty,
+                         status: allMetricsStatus,
+                         defaultTitle: "Use Defaults",
+                         set: { color in
+                             settings.update { $0.theme.setAllColors(color) }
+                         })
                 ForEach(CollectorID.allCases, id: \.self) { id in
                     ColorRow(label: id.label,
                              symbol: id.symbolName,
@@ -38,18 +56,6 @@ struct AppearancePane: View {
                 }
             } header: {
                 Text("Metric Colours")
-            }
-
-            Section {
-                ColorRow(label: "Accent",
-                         symbol: "cursorarrow.rays",
-                         current: Design.Palette.accent,
-                         isOverridden: theme.accent != nil,
-                         set: { color in
-                             settings.update { $0.theme.accent = color }
-                         })
-            } header: {
-                Text("Accent")
             }
 
             Section {
@@ -79,6 +85,14 @@ struct AppearancePane: View {
         .settingsFormStyle()
     }
 
+    /// What the all-metrics row reports. "Default" and "Custom" are not the only two
+    /// answers here: nine rows can disagree, and calling that "Custom" would claim the
+    /// swatch beside it is the colour they are all on.
+    private var allMetricsStatus: String {
+        if theme.uniformColor != nil { return "Custom" }
+        return theme.metrics.isEmpty ? "Default" : "Mixed"
+    }
+
     /// The theme is process state rather than a stored value, so the store alone would
     /// change nothing until the next launch.
     private func applyAppearance(_ mode: AppearanceMode) {
@@ -102,6 +116,11 @@ private struct ColorRow: View {
     let symbol: String
     let current: Color
     let isOverridden: Bool
+    /// Overrides the "Custom"/"Default" reading, for a row that stands for more than
+    /// one stored colour and can therefore be neither.
+    var status: String?
+    /// "Use Default" for one metric, "Use Defaults" for the row that sets them all.
+    var defaultTitle: String = "Use Default"
     let set: (ThemeColor?) -> Void
 
     var body: some View {
@@ -110,7 +129,7 @@ private struct ColorRow: View {
                 // Revert appears only when there is something to revert to, so a row
                 // on its default does not carry a permanently disabled control.
                 if isOverridden {
-                    Button("Use Default") {
+                    Button(defaultTitle) {
                         // Closing first: the wheel is still bound to this swatch, and
                         // leaving it open on a colour that just reverted invites the
                         // user to drag it straight back.
@@ -131,15 +150,17 @@ private struct ColorRow: View {
                     .frame(width: 18, alignment: .center)
                     .foregroundStyle(current)
                 Text(label)
-                Text(isOverridden ? "Custom" : "Default")
+                Text(statusText)
                     .font(.callout)
                     .foregroundStyle(Design.Palette.tertiaryText)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(label)
-            .accessibilityValue(isOverridden ? "Custom colour" : "Default colour")
+            .accessibilityValue("\(statusText) colour")
         }
     }
+
+    private var statusText: String { status ?? (isOverridden ? "Custom" : "Default") }
 
     /// Reads through to whatever is being drawn — the override if there is one, the
     /// shipped colour if not — so opening the picker starts on the colour on screen

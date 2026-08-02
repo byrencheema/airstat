@@ -307,7 +307,7 @@ public final class MenuBarContentView: NSView {
                       scale: CGFloat, context: CGContext) {
         let item = placement.item
         let geometry = placement.geometry
-        let (color, solid, muted) = palette.colors(for: item)
+        let colors = palette.colors(for: item)
         let baseline = centeredBaseline(for: .value)
         var x = placement.x
         var placed = false
@@ -319,14 +319,14 @@ public final class MenuBarContentView: NSView {
 
         if let symbol = placement.symbol, geometry.symbol > 0 {
             gap(Layout.partGap)
-            draw(symbol, color: color, at: CGPoint(x: x, y: bounds.midY), scale: scale)
+            draw(symbol, color: colors.mark, at: CGPoint(x: x, y: bounds.midY), scale: scale)
             x += geometry.symbol
         }
 
         if let caption = item.caption, geometry.caption > 0 {
             gap(Layout.partGap)
             drawText(caption, role: .caption, x: x, baseline: centeredBaseline(for: .caption),
-                     color: muted, scale: scale, context: context)
+                     color: colors.caption, scale: scale, context: context)
             x += geometry.caption
         }
 
@@ -334,14 +334,14 @@ public final class MenuBarContentView: NSView {
             gap(Layout.partGap)
             let box = CGRect(x: x, y: bounds.midY - Layout.graphHeight / 2,
                              width: geometry.graph, height: Layout.graphHeight)
-            drawGraphs(item, in: box, color: color, scale: scale, context: context)
+            drawGraphs(item, in: box, color: colors.mark, scale: scale, context: context)
             x += geometry.graph
         }
 
         if geometry.stack > 0, let caption = item.caption {
             gap(Layout.partGap)
             drawStack(item, caption: caption, in: x, width: geometry.stack,
-                      solid: solid, muted: muted, scale: scale, context: context)
+                      colors: colors, scale: scale, context: context)
             x += geometry.stack
         }
 
@@ -349,12 +349,12 @@ public final class MenuBarContentView: NSView {
             gap(Layout.partGap)
             if geometry.primaryGlyph > 0, let glyph = item.primary.glyph {
                 drawText(glyph, role: .value, x: x, baseline: baseline,
-                         color: muted, scale: scale, context: context)
+                         color: colors.glyph, scale: scale, context: context)
                 x += geometry.primaryGlyph + Layout.glyphGap
             }
             let text = item.isUnavailable ? MetricFormatter.unavailable : item.primary.valueText
             drawValue(text, reserved: geometry.primaryValue, x: x, baseline: baseline,
-                      color: solid, scale: scale, context: context)
+                      color: colors.value, scale: scale, context: context)
             x += geometry.primaryValue
         }
 
@@ -362,11 +362,11 @@ public final class MenuBarContentView: NSView {
             gap(Layout.pairGap)
             if geometry.secondaryGlyph > 0, let glyph = secondary.glyph {
                 drawText(glyph, role: .value, x: x, baseline: baseline,
-                         color: muted, scale: scale, context: context)
+                         color: colors.glyph, scale: scale, context: context)
                 x += geometry.secondaryGlyph + Layout.glyphGap
             }
             drawValue(secondary.valueText, reserved: geometry.secondaryValue, x: x,
-                      baseline: baseline, color: solid, scale: scale, context: context)
+                      baseline: baseline, color: colors.value, scale: scale, context: context)
             x += geometry.secondaryValue
         }
 
@@ -374,12 +374,12 @@ public final class MenuBarContentView: NSView {
         gap(Layout.partGap)
         switch item.style {
         case .bar:
-            drawBar(item, color: color,
+            drawBar(item, color: colors.mark,
                     in: CGRect(x: x, y: bounds.midY - Layout.barHeight / 2,
                                width: Layout.barWidth, height: Layout.barHeight),
                     scale: scale, context: context)
         default:
-            drawRing(item, color: color,
+            drawRing(item, color: colors.mark,
                      in: CGRect(x: x, y: bounds.midY - Layout.ringDiameter / 2,
                                 width: Layout.ringDiameter, height: Layout.ringDiameter),
                      scale: scale, context: context)
@@ -414,7 +414,7 @@ public final class MenuBarContentView: NSView {
     /// width as the number under it, and hanging both off the leading edge left "TEMP"
     /// and "52°C" looking like two unrelated items that happened to be adjacent.
     private func drawStack(_ item: MenuBarItemRender, caption: String, in x: CGFloat,
-                           width columnWidth: CGFloat, solid: CGColor, muted: CGColor,
+                           width columnWidth: CGFloat, colors: ItemColors,
                            scale: CGFloat, context: CGContext) {
         let captionCap = fonts[.stackedCaption].capHeight
         let valueCap = fonts[.stackedValue].capHeight
@@ -425,7 +425,7 @@ public final class MenuBarContentView: NSView {
         let captionWidth = width(caption, role: .stackedCaption)
         drawText(caption, role: .stackedCaption,
                  x: x + (columnWidth - captionWidth) / 2, baseline: captionBaseline,
-                 color: muted, scale: scale, context: context)
+                 color: colors.caption, scale: scale, context: context)
 
         let valueText = item.primary.valueText
         let glyph = item.primary.glyph
@@ -436,11 +436,21 @@ public final class MenuBarContentView: NSView {
 
         if let glyph, glyphWidth > 0 {
             drawText(glyph, role: .stackedValue, x: valueX, baseline: valueBaseline,
-                     color: muted, scale: scale, context: context)
+                     color: colors.glyph, scale: scale, context: context)
             valueX += glyphWidth + Layout.glyphGap
         }
         drawText(valueText, role: .stackedValue, x: valueX, baseline: valueBaseline,
-                 color: solid, scale: scale, context: context)
+                 color: colors.value, scale: scale, context: context)
+    }
+
+    /// What one item paints each of its parts with.
+    private struct ItemColors {
+        /// Graphs, bars, rings and the item's symbol.
+        let mark: NSColor
+        let value: CGColor
+        /// The direction arrow bound to a value, dimmed but the value's colour.
+        let glyph: CGColor
+        let caption: CGColor
     }
 
     /// The colours one draw pass works in.
@@ -458,16 +468,29 @@ public final class MenuBarContentView: NSView {
             muted = base.withAlphaComponent(base.alphaComponent * Layout.captionAlpha).cgColor
         }
 
-        func colors(for item: MenuBarItemRender) -> (NSColor, CGColor, CGColor) {
-            guard var override = override(for: item) else { return (base, solid, muted) }
+        /// The colours one item draws with.
+        ///
+        /// A metric's colour reaches its marks, its number and the ↑/↓ glyph that says
+        /// which number it is — and stops at the caption. "CPU" is not a measurement,
+        /// it is the label on one, and colouring it says nothing the coloured number
+        /// beside it has not already said while costing a word of legibility on the one
+        /// surface with none to spare. So captions stay in the bar's own tint, and nine
+        /// coloured readouts still share one consistent set of labels.
+        func colors(for item: MenuBarItemRender) -> ItemColors {
+            guard var override = override(for: item) else {
+                return ItemColors(mark: base, value: solid, glyph: muted, caption: muted)
+            }
             // An overridden colour is still subject to the staleness dimming the base
             // tint carries, so a coloured readout goes quiet with everything else
             // rather than being the one number that keeps claiming to be current.
             if base.alphaComponent < 1 {
                 override = override.withAlphaComponent(override.alphaComponent * base.alphaComponent)
             }
-            return (override, override.cgColor,
-                    override.withAlphaComponent(override.alphaComponent * Layout.captionAlpha).cgColor)
+            return ItemColors(
+                mark: override,
+                value: override.cgColor,
+                glyph: override.withAlphaComponent(override.alphaComponent * Layout.captionAlpha).cgColor,
+                caption: muted)
         }
 
         /// Nil whenever the item draws in the bar's own tint, which is the overwhelming

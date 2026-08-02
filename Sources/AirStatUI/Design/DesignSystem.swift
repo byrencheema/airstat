@@ -67,12 +67,10 @@ public enum Design {
         public static let quaternaryText = Color(nsColor: .quaternaryLabelColor)
         public static let separator = Color(nsColor: .separatorColor)
 
-        /// Selection and the overlay's grab handle. Follows the user's system accent
-        /// unless they have chosen one here.
-        public static var accent: Color {
-            SettingsStore.currentTheme.accent.map(Color.init(themeColor:))
-                ?? Color(nsColor: .controlAccentColor)
-        }
+        /// Selection and the overlay's grab handle. The user's system accent, always:
+        /// this is the colour every other Mac app on their screen is selecting with,
+        /// and it is not AirStat's to reassign.
+        public static var accent: Color { Color(nsColor: .controlAccentColor) }
 
         /// Per-metric identity colours, used sparingly: in charts, and in the panel
         /// only as a small glyph tint.
@@ -400,8 +398,8 @@ public struct GlassSheen<S: InsettableShape>: View {
 // MARK: - AppKit glass
 
 /// An `NSVisualEffectView` carrying the same sheen, for the surfaces whose background
-/// is a window's content view rather than a SwiftUI modifier: the panel and both
-/// columns of the settings window.
+/// is a window's content view rather than a SwiftUI modifier: the panel and the
+/// settings window, which are one sheet of glass each.
 ///
 /// The sheen is a subview rather than a sublayer of the effect view's own layer:
 /// `NSVisualEffectView` owns that layer tree and rebuilds it when the material or the
@@ -429,9 +427,8 @@ public final class GlassBackdropView: NSVisualEffectView {
         sheen.startPoint = CGPoint(x: 0.5, y: 1)
         sheen.endPoint = CGPoint(x: 0.5, y: 0)
         // A rounded surface is a pane, and light runs a good way down its face. A
-        // square-cornered one is a window column 560 points tall, where the same
-        // gradient is a wash across a third of the window rather than an edge — so
-        // there the highlight is held close to the top.
+        // square-cornered one is an edge of something larger, where the same gradient
+        // is a wash rather than a rim — so there the highlight is held near the top.
         sheen.locations = cornerRadius > 0 ? [0, 0.35, 1] : [0, 0.05, 0.22]
         sheen.cornerRadius = cornerRadius
         sheen.cornerCurve = .continuous
