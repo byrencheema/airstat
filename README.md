@@ -8,9 +8,9 @@ status item, and a floating overlay you can leave on your desktop.
 It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN, and
 opens no network connections.
 
-![The status item, idle](site/assets/menubar-idle.png)
+![The status item](docs/menubar-real.png)
 
-![The panel](site/assets/panel-light.png)
+![The panel](docs/panel-light.png)
 
 ## Why it exists
 
@@ -26,7 +26,7 @@ across 160 paired samples:
 
 That 11 MB is a cold instance whose panel has never been opened. A warm one, after the
 panel and settings have drawn, sits near 70 MB and does not give it back. Both numbers
-are in `site/benchmark.html`, along with the accuracy checks: every collector was probed
+are in the full write-up, along with the accuracy checks: every collector was probed
 against an independent kernel source (`vm_stat`, `sysctl`, `netstat -ib`, `ioreg`,
 `pmset`) and matched on 48 of 48 checks.
 
@@ -76,7 +76,6 @@ for a second during spin-down.
 | `Sources/AirStat` | The executable, app delegate, and the probe and render commands. |
 | `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
-| `site/` | Landing page and the benchmark write-up. |
 
 `AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
 run in a windowless process.
