@@ -5,10 +5,8 @@ disk, battery, temperature, process and host statistics from the kernel, then sh
 them in three places: the menu bar itself, a panel that drops down when you click the
 status item, and a floating overlay you can leave on your desktop.
 
-It is a menu bar accessory, so it has no Dock icon and no windows of its own beyond
-settings. It talks to the system through Mach, IOKit, sysctl and CoreWLAN. It opens no
-network connections and sends no telemetry. Your settings live in `UserDefaults` and
-nowhere else.
+It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN, and
+opens no network connections.
 
 ![The status item, idle](site/assets/menubar-idle.png)
 
@@ -47,16 +45,12 @@ open /Applications/AirStat.app
 ```
 
 `Scripts/build.sh` wraps the SwiftPM binary in a `.app` bundle and signs it ad hoc.
-The bundle is not optional. A menu bar app needs `LSUIElement`, a bundle identifier for
-`UserDefaults` and notifications, and a signature before macOS will grant it a status
-item.
-
-Run `Scripts/build.sh` with no argument for a debug build.
+macOS grants a status item only to a signed bundle with `LSUIElement` set. Run the
+script with no argument for a debug build.
 
 ## Verify it without a screen
 
-The binary can sample collectors and draw its own UI offscreen, so you can check both
-without launching the app.
+The binary samples collectors and draws its own UI offscreen.
 
 ```sh
 swift test                                  # 32 tests, some of which read real sensors
@@ -69,9 +63,9 @@ swift test                                  # 32 tests, some of which read real 
 `netstat -ib`, `ioreg` and `pmset`. `--render` draws the menu bar, panel, overlay and
 settings from fixture data at both appearances and both backing scales.
 
-Two limits are worth knowing. `NSVisualEffectView` draws nothing offscreen, so a render
-cannot tell you whether a material or a translucency is right. The collector contract
-tests read live sensors, so the fan test can flake for a second during spin-down.
+`NSVisualEffectView` draws nothing offscreen, so a render cannot judge a material or a
+translucency. The collector contract tests read live sensors, so the fan test can flake
+for a second during spin-down.
 
 ## Source layout
 
@@ -84,19 +78,14 @@ tests read live sensors, so the fan test can flake for a second during spin-down
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
 | `site/` | Landing page and the benchmark write-up. |
 
-`AirStatKit` never imports SwiftUI or AppKit. That split is what lets the tests and the
-probe run in a windowless process.
+`AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
+run in a windowless process.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It covers the build, the checks to run
-before you open a pull request, and the two house rules that shape the code: comments
-explain why rather than what, and no number reaches the screen unless the machine
-actually reported it.
-
-[CLAUDE.md](CLAUDE.md) holds the things that cost time to learn and are invisible in the
-code, such as the stale-object trap in incremental SwiftPM builds and the macOS window
-behaviour the panel works around.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the checks to run before a pull request and the
+house rules. [CLAUDE.md](CLAUDE.md) records platform behaviour that is expensive to
+rediscover, such as the stale objects an incremental SwiftPM build can link.
 
 ## License
 
