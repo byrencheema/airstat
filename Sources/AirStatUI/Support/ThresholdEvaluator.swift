@@ -1,0 +1,177 @@
+import Foundation
+import AirStatKit
+
+/// A rule that has earned a notification.
+struct ThresholdAlert: Equatable {
+    let ruleID: UUID
+    let metric: ThresholdMetric
+    let value: Double
+    let threshold: Double
+}
+
+/// The decision half of threshold monitoring: given the rules, the current readings
+/// and the time, which rules should notify.
+///
+/// Held apart from delivery so the sustained-duration and cooldown bookkeeping can be
+/// tested without a notification centre, and so the monitor is left holding only the
+/// parts that need one.
+struct ThresholdEvaluator {
+
+    private struct RuleState {
+        var breachBegan: Date?
+        var notifiedAt: Date?
+        /// True once this unbroken run of the condition has produced an alert.
+        var alertedThisEpisode = false
+    }
+
+    private var states: [UUID: RuleState] = [:]
+
+    /// Rules currently carrying breach or cooldown state. Exposed so a test can show
+    /// that state for a rule the user switched off is dropped rather than accumulated.
+    var trackedRuleCount: Int { states.count }
+
+    mutating func reset() { states.removeAll() }
+
+    /// Advances every rule's clock by one sample and returns the rules that fire.
+    ///
+    /// `rules` is the set already cleared for delivery: master switch on, rule on,
+    /// metric measurable here. State for anything absent from it is discarded, so a
+    /// rule the user turns off does not come back mid-cooldown.
+    mutating func alerts(for rules: [ThresholdRule],
+                         readings: [ThresholdMetric: Double],
+                         now: Date) -> [ThresholdAlert] {
+        var alerts: [ThresholdAlert] = []
+        var surviving: [UUID: RuleState] = [:]
+
+        for rule in rules {
+            var state = states[rule.id] ?? RuleState()
+            defer { surviving[rule.id] = state }
+
+            // A missing reading is not evidence the condition ended, but it is not
+            // evidence it held either, so the sustained clock restarts rather than
+            // crediting time nobody measured.
+            guard let value = readings[rule.metric],
+                  rule.metric.isBreached(by: value, threshold: rule.threshold) else {
+                state.breachBegan = nil
+                state.alertedThisEpisode = false
+                continue
+            }
+
+            let began = state.breachBegan ?? now
+            state.breachBegan = began
+            guard now.timeIntervalSince(began) >= rule.sustainedFor else { continue }
+            if rule.metric.notifiesOncePerEpisode && state.alertedThisEpisode { continue }
+            if let notifiedAt = state.notifiedAt, now.timeIntervalSince(notifiedAt) < rule.cooldown { continue }
+
+            state.notifiedAt = now
+            state.alertedThisEpisode = true
+            alerts.append(ThresholdAlert(ruleID: rule.id, metric: rule.metric,
+                                         value: value, threshold: rule.threshold))
+        }
+
+        states = surviving
+        return alerts
+    }
+
+    /// Every watchable metric read out of a snapshot in the units the Notifications
+    /// pane presents, so a rule compares against the number the user typed.
+    ///
+    /// A metric this Mac cannot measure is simply absent rather than zero.
+    static func readings(from snapshot: SystemSnapshot) -> [ThresholdMetric: Double] {
+        var readings: [ThresholdMetric: Double] = [:]
+
+        if let cpu = snapshot.cpu.value {
+            readings[.cpuUsage] = cpu.total.busy * 100
+        }
+        if let memory = snapshot.memory.value {
+            readings[.memoryPressure] = memory.pressureFraction * 100
+        }
+        if let root = snapshot.disk.value?.rootVolume {
+            // `availableBytes` is what the disk module calls free, and decimal GB is
+            // the unit macOS states disk capacity in, which is what the rule's "GB"
+            // suffix will mean to whoever typed the number.
+            readings[.diskFree] = Double(root.availableBytes) / 1_000_000_000
+        }
+        if let power = snapshot.power.value, let percentage = power.percentage {
+            // Split by charge state: a low-battery warning is noise once the machine
+            // is on the charger, and a full-battery alert has nothing to say to a
+            // battery that is discharging through 100%.
+            if power.isPluggedIn {
+                readings[.batteryFull] = percentage
+            } else {
+                readings[.batteryLow] = percentage
+            }
+        }
+        if let thermal = snapshot.thermal.value {
+            if let cpuCelsius = thermal.cpuCelsius { readings[.cpuTemperature] = cpuCelsius }
+            readings[.thermalPressure] = Double(thermal.pressure.rawValue)
+        }
+
+        return readings
+    }
+}
+
+extension ThresholdMetric {
+
+    /// Direction is per metric, not uniform: free disk space and a draining battery
+    /// are alarming as they fall, everything else as it climbs.
+    var firesWhenBelow: Bool {
+        switch self {
+        case .diskFree, .batteryLow: return true
+        case .cpuUsage, .memoryPressure, .batteryFull, .cpuTemperature, .thermalPressure: return false
+        }
+    }
+
+    func isBreached(by value: Double, threshold: Double) -> Bool {
+        firesWhenBelow ? value <= threshold : value >= threshold
+    }
+
+    /// Reaching a full charge is an event, not a condition. A Mac left on the charger
+    /// sits at 100% for hours, and repeating on every cooldown would make the rule
+    /// unusable, so it waits for the battery to leave the threshold first.
+    var notifiesOncePerEpisode: Bool { self == .batteryFull }
+}
+
+extension ThresholdAlert {
+
+    var title: String {
+        switch metric {
+        case .cpuUsage: return "CPU usage is high"
+        case .memoryPressure: return "Memory pressure is high"
+        case .diskFree: return "Startup disk is running out of space"
+        case .batteryLow: return "Battery is low"
+        case .batteryFull: return "Battery is charged"
+        case .cpuTemperature: return "CPU is running hot"
+        case .thermalPressure: return "This Mac is under thermal pressure"
+        }
+    }
+
+    var body: String {
+        switch metric {
+        case .cpuUsage:
+            return "CPU is at \(percent(value)), above your \(percent(threshold)) threshold."
+        case .memoryPressure:
+            return "Memory pressure is at \(percent(value)), above your \(percent(threshold)) threshold."
+        case .diskFree:
+            return "\(gigabytes(value)) free on the startup disk, below your \(gigabytes(threshold)) threshold."
+        case .batteryLow:
+            return "Battery is at \(percent(value)), below your \(percent(threshold)) threshold."
+        case .batteryFull:
+            return "Battery is at \(percent(value)). You can unplug."
+        case .cpuTemperature:
+            return "CPU is at \(degrees(value)), above your \(degrees(threshold)) threshold."
+        case .thermalPressure:
+            return "Thermal pressure is \(level(value)), at or past your \(level(threshold)) threshold."
+        }
+    }
+
+    private func percent(_ value: Double) -> String { "\(Int(value.rounded()))%" }
+
+    private func gigabytes(_ value: Double) -> String { "\(Int(value.rounded())) GB" }
+
+    private func degrees(_ value: Double) -> String { "\(Int(value.rounded()))°" }
+
+    private func level(_ value: Double) -> String {
+        ThermalPressure(rawValue: Int(value))?.label.lowercased() ?? "\(Int(value))"
+    }
+}
