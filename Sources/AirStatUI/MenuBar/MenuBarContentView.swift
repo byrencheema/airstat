@@ -52,6 +52,48 @@ public final class MenuBarContentView: NSView {
         static let symbolSize: CGFloat = 13
         /// Never let the item shrink to a target too small to click.
         static let minimumWidth: CGFloat = 24
+
+        /// The system battery indicator, measured off Apple's own. Not in
+        /// `Design.MenuBar` because none of it is reusable: these are the proportions of
+        /// one drawing that exists in one place, and a shell 22 points long is only
+        /// right because the fill inside it is 18 and 18 points is enough columns for a
+        /// percentage to move visibly without the shell dominating the bar.
+        static let batteryBodyWidth: CGFloat = 22
+        static let batteryBodyHeight: CGFloat = 11
+        static let batteryCornerRadius: CGFloat = 3.2
+        static let batteryStroke: CGFloat = 1
+        /// The terminal on the right, and the gap that keeps it from reading as part of
+        /// the shell.
+        static let batteryNubWidth: CGFloat = 2
+        static let batteryNubHeight: CGFloat = 4.5
+        static let batteryNubGap: CGFloat = 1
+        /// Outer edge to the fill: the stroke, plus a point of air so the fill does not
+        /// touch the shell it sits in.
+        static let batteryFillInset: CGFloat = 2
+        static let batteryFillRadius: CGFloat = 1.5
+        /// A charge too small to draw honestly still gets a sliver, because an empty
+        /// shell and a shell at 2% are not the same thing.
+        static let batteryMinimumFill: CGFloat = 2
+        /// The shell and its terminal sit back from the fill. Apple draws the outline at
+        /// roughly a third of the label colour so the fill is the thing the eye lands on.
+        static let batteryShellAlpha: CGFloat = 0.4
+        /// Bolt height, and the width of the gap cleared around it. Together they stay
+        /// inside the shell's 9pt interior, so the gap never nicks the outline.
+        static let batteryBoltHeight: CGFloat = 7.8
+        static let batteryBoltHalo: CGFloat = 0.5
+        static let batteryBoltAspect: CGFloat = 0.62
+        /// The bolt, in a unit box with y running up as this view's coordinates do.
+        /// Six points: the top tip, the ledge on the left, the bottom tip, and the ledge
+        /// on the right. Written out rather than derived because a lightning bolt is a
+        /// drawn shape, not a computed one.
+        static let batteryBoltPoints: [CGPoint] = [
+            CGPoint(x: 0.65, y: 1.00),
+            CGPoint(x: 0.05, y: 0.42),
+            CGPoint(x: 0.38, y: 0.42),
+            CGPoint(x: 0.30, y: 0.00),
+            CGPoint(x: 0.95, y: 0.58),
+            CGPoint(x: 0.62, y: 0.58),
+        ]
         /// Captions and direction glyphs support the number; they never compete with it.
         static let captionAlpha: CGFloat = 0.65
         static let unavailableAlpha: CGFloat = 0.4
@@ -135,6 +177,7 @@ public final class MenuBarContentView: NSView {
     /// the whole mechanism that keeps the item from reflowing as a value changes.
     private struct Geometry {
         var symbol: CGFloat = 0
+        var battery: CGFloat = 0
         var caption: CGFloat = 0
         var graph: CGFloat = 0
         var primaryGlyph: CGFloat = 0
@@ -156,6 +199,7 @@ public final class MenuBarContentView: NSView {
                 placed = true
             }
             append(symbol, after: Layout.partGap)
+            append(battery, after: Layout.partGap)
             append(caption, after: Layout.partGap)
             append(graph, after: Layout.partGap)
             append(stack, after: Layout.partGap)
@@ -190,6 +234,13 @@ public final class MenuBarContentView: NSView {
         // which is a sensor event, not a per-sample one.
         guard !item.isUnavailable else {
             geometry.primaryValue = width(MetricFormatter.unavailable, role: .value)
+            return geometry
+        }
+
+        // The indicator is the whole readout: no number, no series, nothing beside it.
+        if item.style == .battery {
+            geometry.battery = Layout.batteryBodyWidth + Layout.batteryNubGap
+                + Layout.batteryNubWidth
             return geometry
         }
 
@@ -302,6 +353,12 @@ public final class MenuBarContentView: NSView {
             gap(Layout.partGap)
             draw(symbol, color: colors.mark, at: CGPoint(x: x, y: bounds.midY), scale: scale)
             x += geometry.symbol
+        }
+
+        if geometry.battery > 0 {
+            gap(Layout.partGap)
+            drawBattery(item, x: x, color: colors.mark, scale: scale, context: context)
+            x += geometry.battery
         }
 
         if let caption = item.caption, geometry.caption > 0 {
@@ -471,6 +528,114 @@ public final class MenuBarContentView: NSView {
             // already said, in the one place on screen with no room to say anything.
             return item.tint.map(NSColor.init(themeColor:))
         }
+    }
+
+    // MARK: Battery
+
+    /// Draws the system's own battery indicator: a rounded shell with a terminal on the
+    /// right, filled from the left in proportion to the charge, red when it is low, and
+    /// carrying a bolt while power is going in.
+    ///
+    /// Every value it needs arrives on `item`. Nothing here asks the engine what the
+    /// battery is doing, because the status item redraws only when the model changes: a
+    /// charge fetched at draw time would sit at whatever it was when some *other*
+    /// readout last moved, and a battery that is wrong is worse than no battery.
+    private func drawBattery(_ item: MenuBarItemRender, x: CGFloat, color: NSColor,
+                             scale: CGFloat, context: CGContext) {
+        let pixel = 1 / scale
+        let line = max(Layout.batteryStroke, pixel)
+
+        // Snapped outer box first, then everything measured off it, so the stroke lands
+        // on a half-pixel at 1x and the fill's edges land on whole ones.
+        let outer = snapped(CGRect(x: x,
+                                   y: bounds.midY - Layout.batteryBodyHeight / 2,
+                                   width: Layout.batteryBodyWidth,
+                                   height: Layout.batteryBodyHeight), scale: scale)
+        let shellColor = color.withAlphaComponent(color.alphaComponent * Layout.batteryShellAlpha)
+
+        let shell = outer.insetBy(dx: line / 2, dy: line / 2)
+        let shellRadius = max(Layout.batteryCornerRadius - line / 2, 0)
+        context.addPath(CGPath(roundedRect: shell, cornerWidth: shellRadius,
+                               cornerHeight: shellRadius, transform: nil))
+        context.setStrokeColor(shellColor.cgColor)
+        context.setLineWidth(line)
+        context.strokePath()
+
+        let nub = snapped(CGRect(x: outer.maxX + Layout.batteryNubGap,
+                                 y: bounds.midY - Layout.batteryNubHeight / 2,
+                                 width: Layout.batteryNubWidth,
+                                 height: Layout.batteryNubHeight), scale: scale)
+        let nubRadius = min(nub.width, nub.height) / 2
+        context.addPath(CGPath(roundedRect: nub, cornerWidth: nubRadius,
+                               cornerHeight: nubRadius, transform: nil))
+        context.setFillColor(shellColor.cgColor)
+        context.fillPath()
+
+        let track = outer.insetBy(dx: Layout.batteryFillInset, dy: Layout.batteryFillInset)
+        let charge = min(max(item.batteryCharge ?? 0, 0), 1)
+        if charge > 0, track.width > 0 {
+            // Snapped to whole pixels: a fill whose right edge lands mid-pixel is a
+            // grey column that reads as a lower charge than the one it is drawing.
+            let fill = snapped(CGRect(x: track.minX, y: track.minY,
+                                      width: max(track.width * charge, Layout.batteryMinimumFill),
+                                      height: track.height), scale: scale)
+            // Red is not decoration and not a threshold colour the app invented: it is
+            // what macOS turns this exact indicator when the charge gets low, and a user
+            // who has read that red for twenty years should not have to learn it again.
+            let fillColor = item.isBatteryLow
+                ? NSColor.systemRed.withAlphaComponent(color.alphaComponent)
+                : color
+            let radius = min(Layout.batteryFillRadius, fill.width / 2, fill.height / 2)
+            context.addPath(CGPath(roundedRect: fill, cornerWidth: radius,
+                                   cornerHeight: radius, transform: nil))
+            context.setFillColor(fillColor.cgColor)
+            context.fillPath()
+        }
+
+        if item.isBatteryCharging {
+            drawChargingBolt(in: outer, color: color, scale: scale, context: context)
+        }
+    }
+
+    /// The bolt, with a gap cleared around it before it is drawn.
+    ///
+    /// Apple leaves that gap rather than laying one solid shape on another, and it is
+    /// what makes the bolt readable at a near-full charge: a black bolt on a black fill
+    /// is nothing at all. Cleared rather than painted in the bar's colour, because the
+    /// menu bar's background is a wallpaper this view cannot see — punching through to it
+    /// is the only way to get a gap that is the right colour on every desktop.
+    ///
+    /// Drawn as a path rather than from `bolt.fill`. An SF Symbol carries its own layout
+    /// padding, so a symbol asked for at 7 points puts about 4 points of ink on screen,
+    /// and inside an 11-point shell that difference is the whole readability of it.
+    private func drawChargingBolt(in shell: CGRect, color: NSColor, scale: CGFloat,
+                                  context: CGContext) {
+        let height = Layout.batteryBoltHeight
+        let width = height * Layout.batteryBoltAspect
+        let box = CGRect(x: snap(shell.midX - width / 2, scale),
+                         y: snap(shell.midY - height / 2, scale),
+                         width: width, height: height)
+        let bolt = CGMutablePath()
+        for (index, point) in Layout.batteryBoltPoints.enumerated() {
+            let mapped = CGPoint(x: box.minX + point.x * box.width,
+                                 y: box.minY + point.y * box.height)
+            index == 0 ? bolt.move(to: mapped) : bolt.addLine(to: mapped)
+        }
+        bolt.closeSubpath()
+
+        context.saveGState()
+        context.setBlendMode(.clear)
+        context.addPath(bolt)
+        context.setLineWidth(Layout.batteryBoltHalo * 2)
+        context.setLineJoin(.round)
+        context.strokePath()
+        context.addPath(bolt)
+        context.fillPath()
+        context.restoreGState()
+
+        context.addPath(bolt)
+        context.setFillColor(color.cgColor)
+        context.fillPath()
     }
 
     // MARK: Graphs
@@ -694,7 +859,7 @@ private extension MenuBarDisplayStyle {
     var drawsValue: Bool {
         switch self {
         case .text, .textAndGraph, .iconAndText: return true
-        case .graph: return false
+        case .graph, .battery: return false
         }
     }
 }

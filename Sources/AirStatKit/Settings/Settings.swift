@@ -126,29 +126,47 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
 
     /// Styles that make sense for this metric. Only the metrics that keep a series
     /// can be graphed; the rest are a number, with or without their icon.
+    ///
+    /// The first entry is the style this metric lands on when it has no valid one:
+    /// a newly added readout, or one whose stored style an older build wrote and this
+    /// metric no longer supports.
     public var supportedStyles: [MenuBarDisplayStyle] {
         switch self {
         case .uptime, .batteryTime, .cpuFrequency, .diskFree:
             return [.text, .iconAndText]
+        case .battery:
+            // The only metric the system's own indicator can draw, and the one it
+            // should draw by default, so it leads the list.
+            return [.battery] + MenuBarDisplayStyle.allCases.filter { $0 != .battery }
         default:
-            return MenuBarDisplayStyle.allCases
+            return MenuBarDisplayStyle.allCases.filter { $0 != .battery }
         }
     }
 }
 
 /// How one readout draws.
 ///
-/// Four, where there were seven. Bar and Ring drew the same fraction a graph draws,
-/// smaller and without the history, and neither said what the fraction was of — a 5pt
-/// bar beside a 5pt bar is two anonymous slivers. Icon-alone was worse: a stats app
-/// whose readout is an icon is showing a picture of a metric instead of the metric.
-/// What is left is the number, the number's history, and the number with a mark
+/// Four general styles, where there were seven. Bar and Ring drew the same fraction a
+/// graph draws, smaller and without the history, and neither said what the fraction was
+/// of — a 5pt bar beside a 5pt bar is two anonymous slivers. Icon-alone was worse: a
+/// stats app whose readout is an icon is showing a picture of a metric instead of the
+/// metric. What is left is the number, the number's history, and the number with a mark
 /// saying which metric it is.
+///
+/// `.battery` is a fifth style and it is not a counter-example to any of that. The
+/// objection to icon-alone was that the drawing does not move when the metric does: a
+/// chip glyph looks the same at 3% and 97%, so it is a picture of CPU rather than a
+/// reading of it. The system battery indicator is the opposite. Its fill length *is*
+/// the charge, it reddens when the charge is low and it carries a bolt while power is
+/// going in, so nothing is lost by taking the digits away — and this is the one shape
+/// macOS has spent twenty years teaching every user to read at a glance. It is offered
+/// for `.battery` alone, because it is the only metric it can honestly draw.
 public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
     case text
     case graph
     case textAndGraph
     case iconAndText
+    case battery
 
     public var label: String {
         switch self {
@@ -156,6 +174,16 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
         case .graph: return "Graph"
         case .textAndGraph: return "Text & Graph"
         case .iconAndText: return "Icon & Text"
+        case .battery: return "Battery Indicator"
+        }
+    }
+
+    /// Whether a caption above the value would add anything. It would not for the two
+    /// styles that already name their metric with a glyph.
+    public var supportsCaption: Bool {
+        switch self {
+        case .text, .graph, .textAndGraph: return true
+        case .iconAndText, .battery: return false
         }
     }
 }
@@ -236,22 +264,31 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         self.usesCombinedItem = usesCombinedItem
     }
 
-    /// Two readouts, not three.
+    /// CPU, its temperature, GPU, and the battery.
     ///
-    /// Network throughput is by far the widest element — two values plus units — and a
-    /// menu bar item that is wider than everything Apple ships gets silently dropped on a
-    /// notched display when a few other extras are present. CPU and memory are what a
-    /// stats app is for; network stays one click away in Settings for those who want it.
+    /// Network throughput stays out: it is by far the widest element — two values plus
+    /// units — and a menu bar item wider than everything Apple ships gets silently
+    /// dropped on a notched display when a few other extras are present. It is one
+    /// click away in Settings for those who want it.
     ///
-    /// Both carry their name above their number rather than an icon beside it. An icon
-    /// is a guess the reader has to make — a chip glyph is CPU to whoever drew it and
-    /// "some hardware" to everyone else — while "CPU" is four narrow characters set at
-    /// eight points in the metric's own colour, above the number, in a column the
-    /// number was already paying for. The default drops the sparkline: at 34pt wide it
-    /// reads as a scribble, and it was the single widest element left.
+    /// The three numbers carry their name above their number rather than an icon beside
+    /// it. An icon is a guess the reader has to make — a chip glyph is CPU to whoever
+    /// drew it and "some hardware" to everyone else — while "CPU" is four narrow
+    /// characters set at eight points, above the number, in a column the number was
+    /// already paying for. No sparkline: at 34pt wide it reads as a scribble, and it
+    /// was the single widest element left.
+    ///
+    /// The battery is the exception and takes no caption and no number. It draws as the
+    /// system's own indicator, which every user already reads without being told what
+    /// it is or what the fill means.
+    ///
+    /// Only a fresh install sees this. Anyone with a settings file already has their own
+    /// `menuBar.items` and keeps them.
     public static let defaultItems: [MenuBarItemConfig] = [
         MenuBarItemConfig(metric: .cpuUsage, style: .text, showsCaption: true),
-        MenuBarItemConfig(metric: .memoryUsage, style: .text, showsCaption: true),
+        MenuBarItemConfig(metric: .cpuTemperature, style: .text, showsCaption: true),
+        MenuBarItemConfig(metric: .gpuUsage, style: .text, showsCaption: true),
+        MenuBarItemConfig(metric: .battery, style: .battery, showsCaption: false),
     ]
 
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }

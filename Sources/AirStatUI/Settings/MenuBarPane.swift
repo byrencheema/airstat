@@ -189,9 +189,9 @@ struct MenuBarPane: View {
             }
             .pickerStyle(.menu)
 
-            // The icon style names the metric with its glyph, so there is nothing for
-            // a caption to add and the toggle would do nothing if shown.
-            if item.style != .iconAndText {
+            // The icon and battery styles name the metric with their glyph, so there is
+            // nothing for a caption to add and the toggle would do nothing if shown.
+            if item.style.supportsCaption {
                 Toggle("Show \"\(caption(for: item.metric))\" above the value",
                        isOn: captionBinding(for: item))
             }

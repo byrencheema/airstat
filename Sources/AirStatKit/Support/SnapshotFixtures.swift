@@ -59,6 +59,27 @@ public enum SnapshotFixtures {
         )
     }
 
+    /// Plugged in and taking a charge, on an otherwise quiet machine.
+    ///
+    /// Its own scenario because charging is a *drawing* state, not just a number: the
+    /// menu bar battery grows a bolt, and nothing else in `nominal` or `underLoad` puts
+    /// it there. Charging from low rather than from full, so the bolt has to be legible
+    /// against the shell as well as against the fill.
+    public static var charging: SystemSnapshot {
+        SystemSnapshot(
+            cpu: .value(cpu(busy: 0.21)),
+            memory: .value(memory(usedFraction: 0.48, pressure: 0.26)),
+            gpu: .value(gpu(utilization: 0.07)),
+            network: .value(network(down: 640_000, up: 91_000)),
+            disk: .value(disk(read: 2_100_000, write: 480_000, usedFraction: 0.71)),
+            power: .value(power(percent: 34, charging: true)),
+            thermal: .value(thermal(cpuTemp: 47, fanRPM: 1_460)),
+            processes: .value(processes(topCPU: 18.4)),
+            system: .value(system()),
+            capturedAt: referenceDate
+        )
+    }
+
     /// Nothing sampled yet — the first frame after launch.
     public static var pending: SystemSnapshot { SystemSnapshot() }
 

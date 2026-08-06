@@ -26,12 +26,13 @@ public enum OffscreenRenderer {
     }
 
     public enum Scenario: String, CaseIterable, Sendable {
-        case nominal, underLoad, degraded, pending
+        case nominal, underLoad, charging, degraded, pending
 
         public var snapshot: SystemSnapshot {
             switch self {
             case .nominal: return SnapshotFixtures.nominal
             case .underLoad: return SnapshotFixtures.underLoad
+            case .charging: return SnapshotFixtures.charging
             case .degraded: return SnapshotFixtures.degraded
             case .pending: return SnapshotFixtures.pending
             }
