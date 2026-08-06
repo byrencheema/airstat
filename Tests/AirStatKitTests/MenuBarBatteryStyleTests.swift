@@ -126,8 +126,48 @@ struct BatteryRenderModelTests {
         #expect(item.batteryCharge == nil)
     }
 
-    /// The number is off the screen in this style, so the accessibility tree is the only
-    /// place it still exists.
+    /// The digits drawn inside the shell. No percent sign: there is nothing else a
+    /// number inside a battery could be a proportion of.
+    @Test("the digits are the whole percent, with no sign")
+    func digitsAreBarePercent() {
+        #expect(item(snapshot(percent: 76, charging: false)).batteryValueText == "76")
+        #expect(item(snapshot(percent: 100, charging: false)).batteryValueText == "100")
+        #expect(item(snapshot(percent: 8, charging: false)).batteryValueText == "8")
+        #expect(item(snapshot(percent: 0, charging: false)).batteryValueText == "0")
+    }
+
+    /// The user's requirement in one assertion: whatever the charge, whatever the state,
+    /// there is a number to draw.
+    @Test("there is always a number, at every charge and in every state")
+    func digitsAreAlwaysPresent() {
+        for percent in stride(from: 0.0, through: 100.0, by: 1) {
+            for charging in [false, true] {
+                let rendered = item(snapshot(percent: percent, charging: charging))
+                #expect(rendered.batteryValueText?.isEmpty == false,
+                        "no digits at \(percent)% charging=\(charging)")
+            }
+        }
+    }
+
+    /// The fill is drawn from `batteryCharge` and the digits from `batteryValueText`, and
+    /// the two are read side by side inside one shell. A number that rounded away from
+    /// the fill it sits in would be the most visible possible bug.
+    @Test("the digits agree with the charge they are drawn over")
+    func digitsAgreeWithTheFill() {
+        for percent in stride(from: 0.0, through: 100.0, by: 0.5) {
+            let rendered = item(snapshot(percent: percent, charging: false))
+            let charge = rendered.batteryCharge ?? -1
+            #expect(rendered.batteryValueText == String(Int((charge * 100).rounded())))
+        }
+    }
+
+    @Test("a readout with no battery has no digits either")
+    func noBatteryNoDigits() {
+        #expect(item(SnapshotFixtures.degraded).batteryValueText == nil)
+    }
+
+    /// The number is no longer spelled out beside the readout, so the accessibility tree
+    /// is where the unrounded state still lives.
     @Test("VoiceOver still gets the percentage and the state")
     func accessibilityKeepsTheNumber() {
         #expect(item(snapshot(percent: 76, charging: false)).accessibilityLabel == "Battery 76%")
@@ -185,6 +225,10 @@ struct BatteryDrawingTests {
 
     /// The one thing a menu bar must never do is move, and the charge changes every
     /// sample. The shell is a fixed size and only its fill moves inside it.
+    ///
+    /// Charging is in here deliberately. The bolt is drawn outside the shell, so its
+    /// width is reserved whether or not there is a bolt in it — otherwise plugging in a
+    /// charger would resize the item and drag every readout to its left along with it.
     @Test("the item is the same width empty, full and charging")
     func widthIsFixed() {
         let full = width(percent: 100)
@@ -192,20 +236,9 @@ struct BatteryDrawingTests {
         #expect(width(percent: 8) == full)
         #expect(width(percent: 51) == full)
         #expect(width(percent: 64, charging: true) == full)
-    }
-
-    /// The indicator draws no number, so it should be narrower than the same readout
-    /// spelled out. If it is not, it is not worth the drawing.
-    @Test("it is narrower than the same readout as text")
-    func narrowerThanText() {
-        let view = MenuBarContentView(frame: .zero)
-        var snapshot = SnapshotFixtures.nominal
-        snapshot.power = .value(SnapshotFixtures.power(percent: 76, charging: false))
-        let text = MenuBarItemConfig(metric: .battery, style: .text, showsCaption: true)
-        view.update(with: MenuBarRenderModel(
-            snapshot: snapshot, history: SnapshotFixtures.history(),
-            settings: Settings(menuBar: MenuBarSettings(items: [text])), isStale: false))
-        #expect(width(percent: 76) < view.intrinsicContentSize.width)
+        #expect(width(percent: 100, charging: true) == full)
+        // One and three digits are the widest and narrowest numbers it can hold.
+        #expect(width(percent: 7) == full)
     }
 
     /// Exercises the real drawing path, including the bolt's cleared gap, at both
