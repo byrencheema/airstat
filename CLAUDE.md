@@ -38,6 +38,32 @@ Things that cost time to learn and are not visible in the code.
   `.regularMaterial` for the panel's real backdrop.
 - `screencapture` has no Screen Recording grant in this environment, so live windows
   cannot be checked without the user looking.
+- The Accessibility API is the way to drive the running app: `AXUIElementPerformAction`
+  presses real controls, and the whole UI is well labelled, so a dump reads like the
+  screen. Two limits are worth knowing before trusting an empty result.
+  - **A locked screen empties `AXWindows` for every app on the machine**, and it looks
+    exactly like the app failing to publish anything. It is not the whole API that
+    goes: menu bar extras keep answering, and the status item's live value can be read
+    minutes after the lock in the same process that enumerates no windows. So a
+    successful AX read is not evidence the screen is unlocked, and window enumeration
+    coming back empty is not evidence of a bug. Check `CGSSessionScreenIsLocked` from
+    `CGSessionCopyCurrentDictionary` and confirm against a control app you know has
+    windows. Two of us independently invented app-shaped explanations for this, one
+    blaming `makeKey()` and one blaming activation state, and both fit the poisoned
+    data perfectly.
+  - An app with **no window open** reports an `AXWindows` array holding the
+    application element itself. Walking it naively never terminates.
+- Synthesised input does not cover everything. `CGEvent` mouse clicks reach ordinary
+  windows but not the menu bar, so the status item's left and right click paths need a
+  human. Synthesised key events do not trigger Carbon hot keys at all, whatever the tap
+  or event-source state, so a recorded global shortcut can only be confirmed by a real
+  key press.
+- `swift build --scratch-path <dir>` gives a trustworthy build without `rm -rf .build`,
+  which matters when the stale-object problem above bites and something else is using
+  the shared build directory.
+- `HOME` does not redirect `applicationSupportDirectory`, so launching with a fake home
+  does not isolate a test instance from the real settings file. `SettingsStore(directory:)`
+  is the only thing that does.
 - Contract tests read real sensors. The fan minimum-RPM test flakes during spin-down
   (1 RPM tolerance against the SMC's stated minimum). Re-run before investigating.
 

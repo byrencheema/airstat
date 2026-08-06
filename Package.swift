@@ -33,9 +33,13 @@ let package = Package(
             dependencies: ["AirStatKit", "AirStatUI"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // Named for AirStatKit because that is where almost everything under test
+        // lives, but it also links AirStatUI: the pieces of UI logic worth testing
+        // are the pure ones (threshold evaluation, render models), and giving them a
+        // second test target would split the suite for no gain.
         .testTarget(
             name: "AirStatKitTests",
-            dependencies: ["AirStatKit"],
+            dependencies: ["AirStatKit", "AirStatUI"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
