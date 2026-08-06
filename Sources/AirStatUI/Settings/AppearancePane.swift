@@ -142,7 +142,7 @@ private struct ColorRow: View {
                     }
                     .buttonStyle(.link)
                     .font(.callout)
-                    .accessibilityHint("Returns \(label) to the colour AirStat ships with")
+                    .accessibilityHint("Returns \(label) to the colour AirStats ships with")
                 }
                 ColorPicker("", selection: binding, supportsOpacity: false)
                     .labelsHidden()

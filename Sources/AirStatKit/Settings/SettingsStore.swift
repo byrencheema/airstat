@@ -57,9 +57,14 @@ public final class SettingsStore {
         SettingsStore.currentTheme = loaded.theme
     }
 
+    /// Note that `HOME` does not redirect `applicationSupportDirectory`, so a test
+    /// instance cannot be isolated by launching it with a fake home. Pass `directory:`
+    /// instead; it is the only thing that keeps a test off the user's real settings.
     public nonisolated static var defaultDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        // Deliberately still "AirStat" after the rename, for the same reason the bundle
+        // identifier is: renaming it would strand every existing user's settings.
         let dir = base.appendingPathComponent("AirStat", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir

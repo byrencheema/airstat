@@ -31,9 +31,16 @@ fi
 # SwiftPM emits the UI target's resources as a bundle beside the binary. It has to
 # travel into Contents/Resources or `Bundle.module` finds nothing at runtime and the
 # app launches without its own mark.
-for bundle in "$BIN_DIR"/*_AirStatUI.bundle; do
-  [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
-done
+#
+# Named exactly rather than globbed: a tree built under an earlier package name leaves
+# that name's bundle in the bin directory forever, and a glob ships both.
+BUNDLE="$BIN_DIR/AirStats_AirStatUI.bundle"
+if [ -d "$BUNDLE" ]; then
+  cp -R "$BUNDLE" "$APP/Contents/Resources/"
+else
+  echo "error: $BUNDLE is missing; the app would launch with no logo" >&2
+  exit 1
+fi
 
 # Ad-hoc signature. Without any signature macOS refuses some window-server
 # privileges a status item needs.

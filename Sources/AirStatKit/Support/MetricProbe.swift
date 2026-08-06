@@ -53,7 +53,7 @@ public enum MetricProbe {
         startIfNeeded(network); startIfNeeded(disk); startIfNeeded(power)
         startIfNeeded(thermal); startIfNeeded(processes); startIfNeeded(system)
 
-        emit("AirStat metric probe")
+        emit("AirStats metric probe")
         emit("collectors: \(options.collectors.map(\.rawValue).sorted().joined(separator: ", "))")
         emit("samples: \(options.repeatCount) every \(options.interval)s")
         emit(String(repeating: "─", count: 68))
@@ -197,6 +197,9 @@ public enum MetricProbe {
             "since boot   ↓ \(fmt.bytes(s.totalDownloadBytes))  ↑ \(fmt.bytes(s.totalUploadBytes))",
             "primary      \(s.primaryInterfaceName ?? "—") (\(s.connectionType.label))  vpn=\(s.isVPNActive)",
             "address      \(s.localIPv4 ?? "—")",
+            // The probe builds its own collector, so the lookup is off here unless a
+            // test turns it on. Printing the state is how that stays visible.
+            "public ip    \(s.publicIP.value ?? failureKind(s.publicIP.failure ?? .pending))",
         ]
         if let wifi = s.wifi {
             lines.append("wi-fi        ssid=\(wifi.ssid ?? "—") rssi=\(wifi.rssi.map(String.init) ?? "—") "

@@ -49,7 +49,7 @@ struct GeneralPane: View {
             ShortcutsFormSections(settings: settings)
 
             Section {
-                Toggle("Open AirStat at login",
+                Toggle("Open AirStats at login",
                        isOn: settings.binding(\.general.launchAtLogin, onChange: applyLoginItem))
                 if let loginItemError {
                     SettingsCaution(loginItemError)
