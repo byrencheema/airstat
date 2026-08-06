@@ -1,6 +1,6 @@
 # Contributing
 
-AirStat has a few opinions. They are here so a pull request does not have to find them
+AirStats has a few opinions. They are here so a pull request does not have to find them
 in review.
 
 ## Getting set up
@@ -16,7 +16,7 @@ Scripts/build.sh          # debug .app bundle
 Scripts/build.sh release  # optimised .app bundle
 ```
 
-To run your build, quit the running copy, replace `/Applications/AirStat.app` with the
+To run your build, quit the running copy, replace `/Applications/AirStats.app` with the
 one the script prints, and launch it.
 
 ## Before you open a pull request
@@ -26,8 +26,8 @@ Run these:
 ```sh
 swift build
 swift test
-.build/debug/AirStat --probe            # sanity check the collectors on your Mac
-.build/debug/AirStat --render           # PNGs of every surface, in ./render
+.build/debug/AirStats --probe            # sanity check the collectors on your Mac
+.build/debug/AirStats --render           # PNGs of every surface, in ./render
 ```
 
 If you touched anything that draws, attach the relevant render. If you touched a
@@ -72,6 +72,6 @@ perf: draw charts as shapes instead of Canvas
 
 ## Reporting a bug
 
-Include your Mac model, your macOS version, and the output of `AirStat --probe` for the
+Include your Mac model, your macOS version, and the output of `AirStats --probe` for the
 metric that misbehaved. Sensor coverage varies across Macs more than anything else here,
 so that output is often the whole report.

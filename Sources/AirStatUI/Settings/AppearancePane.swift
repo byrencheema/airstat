@@ -22,17 +22,16 @@ struct AppearancePane: View {
                         Text(mode.label).tag(mode)
                     }
                 }
-            } header: {
-                Text("Theme")
-            }
 
-            Section {
                 // Setting nine metrics to the same colour one row at a time is nine
                 // trips through the colour wheel to express one decision — "I want
                 // this app in my colour" — so that decision gets its own control.
-                // It sits above the individual rows because it overwrites all of
-                // them, and a control that reaches past the rows below it should not
-                // be filed among them.
+                //
+                // It belongs here rather than at the top of the list below it. This is
+                // the same kind of choice as light-or-dark: one setting that decides
+                // how the whole app looks. Filed among the nine per-metric rows it
+                // read as a tenth metric called "All Metrics", and its reach over the
+                // rows beneath it was something you had to discover by using it.
                 ColorRow(label: "All Metrics",
                          symbol: "circle.hexagongrid.fill",
                          current: theme.uniformColor.map(Color.init(themeColor:))
@@ -45,6 +44,11 @@ struct AppearancePane: View {
                          set: { color in
                              settings.update { $0.theme.setAllColors(color) }
                          })
+            } header: {
+                Text("Theme")
+            }
+
+            Section {
                 ForEach(CollectorID.allCases, id: \.self) { id in
                     ColorRow(label: id.label,
                              symbol: id.symbolName,

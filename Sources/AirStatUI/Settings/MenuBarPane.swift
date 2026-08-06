@@ -41,43 +41,16 @@ struct MenuBarPane: View {
             }
 
             Section {
-                LabeledContent("Spacing between readouts") {
-                    HStack(spacing: Design.Space.l) {
-                        Slider(value: settings.quantized(\.menuBar.itemSpacing, step: 1), in: 0...24)
-                            .frame(minWidth: 140)
-                        Text(SettingsLabels.points(settings.settings.menuBar.itemSpacing))
-                            .font(.body.monospacedDigit())
-                            .foregroundStyle(Design.Palette.secondaryText)
-                            .frame(width: 44, alignment: .trailing)
-                    }
-                }
-                .accessibilityElement(children: .contain)
-
-                Toggle("Reserve space for the widest value",
-                       isOn: settings.binding(\.menuBar.usesFixedWidth))
                 Toggle("Combine into one menu bar item",
                        isOn: settings.binding(\.menuBar.usesCombinedItem))
             } header: {
                 Text("Layout")
-            }
-
-            Section {
-                Toggle("Hide readouts that are idle", isOn: settings.binding(\.menuBar.hidesIdleItems))
-                if settings.settings.menuBar.hidesIdleItems {
-                    LabeledContent("Idle below") {
-                        HStack(spacing: Design.Space.l) {
-                            Slider(value: settings.quantized(\.menuBar.idleThreshold, step: 0.01),
-                                   in: 0...0.5)
-                                .frame(minWidth: 140)
-                            Text(SettingsLabels.percent(settings.settings.menuBar.idleThreshold))
-                                .font(.body.monospacedDigit())
-                                .foregroundStyle(Design.Palette.secondaryText)
-                                .frame(width: 44, alignment: .trailing)
-                        }
-                    }
-                }
-            } header: {
-                Text("Quiet Mode")
+            } footer: {
+                Text("One item keeps the readouts together and in order. Separate items "
+                     + "can be rearranged among your other menu bar icons, and macOS "
+                     + "hides them one at a time when the bar runs out of room.")
+                .font(.callout)
+                .foregroundStyle(Design.Palette.secondaryText)
             }
 
             Section {
@@ -147,17 +120,6 @@ struct MenuBarPane: View {
                             itemLabel: item.metric.label) { offset in
                 move(item, by: offset)
             }
-
-            Button {
-                selection = item.id
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Design.Palette.tertiaryText)
-            }
-            .buttonStyle(.borderless)
-            .help("Configure \(item.metric.label)")
-            .accessibilityLabel("Configure \(item.metric.label)")
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.metric.label)
@@ -200,6 +162,12 @@ struct MenuBarPane: View {
 
     // MARK: Selected readout
 
+    /// The controls for the selected row.
+    ///
+    /// The header names the readout being edited rather than repeating the pane's own
+    /// title. With nothing but "Metric" and "Display as" under a heading that said
+    /// "CPU Usage", it read as a section of the pane, and changing the picker while
+    /// looking at a list of four readouts was a guess about which one was moving.
     @ViewBuilder
     private func itemDetail(index: Int) -> some View {
         let item = items[index]
@@ -217,27 +185,26 @@ struct MenuBarPane: View {
             }
             .pickerStyle(.menu)
 
-            Toggle("Show caption", isOn: captionBinding(index: index))
-
-            if item.style == .graph || item.style == .textAndGraph {
-                LabeledContent("Graph width") {
-                    HStack(spacing: Design.Space.l) {
-                        Slider(value: graphWidthBinding(index: index), in: 20...120)
-                            .frame(minWidth: 140)
-                        Text(SettingsLabels.points(item.graphWidth ?? Double(Design.MenuBar.graphWidth)))
-                            .font(.body.monospacedDigit())
-                            .foregroundStyle(Design.Palette.secondaryText)
-                            .frame(width: 44, alignment: .trailing)
-                    }
-                }
+            // The icon style names the metric with its glyph, so there is nothing for
+            // a caption to add and the toggle would do nothing if shown.
+            if item.style != .iconAndText {
+                Toggle("Show \"\(caption(for: item.metric))\" above the value",
+                       isOn: captionBinding(index: index))
             }
         } header: {
-            Text(item.metric.label)
+            Label("Editing \(item.metric.label)", systemImage: "slider.horizontal.3")
+                .foregroundStyle(Design.Palette.accent)
         } footer: {
             if let reason = availability.note(for: item.metric) {
                 SettingsCaution(reason)
             }
         }
+    }
+
+    /// The label the menu bar would draw for this metric, quoted back so the toggle
+    /// says what it will actually put on screen.
+    private func caption(for metric: MenuBarMetric) -> String {
+        MenuBarRenderModel.captionText(for: metric) ?? metric.label
     }
 
     // MARK: Model access
@@ -286,16 +253,6 @@ struct MenuBarPane: View {
                     settings.update { s in
                         guard s.menuBar.items.indices.contains(index) else { return }
                         s.menuBar.items[index].showsCaption = shows
-                    }
-                })
-    }
-
-    private func graphWidthBinding(index: Int) -> Binding<Double> {
-        Binding(get: { items[index].graphWidth ?? Double(Design.MenuBar.graphWidth) },
-                set: { width in
-                    settings.update { s in
-                        guard s.menuBar.items.indices.contains(index) else { return }
-                        s.menuBar.items[index].graphWidth = (width / 2).rounded() * 2
                     }
                 })
     }

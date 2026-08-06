@@ -49,7 +49,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             window?.title = tab.label
         }
         window.delegate = self
-        window.title = "AirStat Settings"
+        window.title = "AirStats Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
 
@@ -168,6 +168,30 @@ struct SettingsRootView: View {
     private var sidebar: some View {
         ScrollView {
             VStack(spacing: Design.Space.xxs) {
+                // The window's title bar is transparent and carries no title, so the
+                // mark is what says whose settings these are.
+                //
+                // Set as a masthead rather than as a row. At the rows' own type size,
+                // with their glyph column and their inset, it was a row — one that did
+                // nothing when clicked, sitting directly above six that do. Smaller
+                // caps, the metrics tint, and a rule under it put it in a different
+                // register: this labels the list, it is not the top of it.
+                VStack(alignment: .leading, spacing: Design.Space.s) {
+                    HStack(spacing: Design.Space.xs) {
+                        LogoMark(size: 13)
+                        Text("AIRSTATS")
+                            .font(.system(size: 10, weight: .semibold))
+                            .kerning(0.6)
+                    }
+                    .foregroundStyle(Design.Palette.tertiaryText)
+                    Rectangle()
+                        .fill(Design.Palette.separator)
+                        .frame(height: Design.Space.hairline)
+                }
+                .padding(.horizontal, Design.Space.m)
+                .padding(.bottom, Design.Space.xs)
+                .accessibilityHidden(true)
+
                 ForEach(SettingsTab.allCases) { item in
                     Button {
                         tab = item

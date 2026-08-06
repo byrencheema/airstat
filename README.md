@@ -1,6 +1,6 @@
-# AirStat
+# AirStats
 
-AirStat is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
+AirStats is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
 disk, battery, temperature, process and host statistics from the kernel, then shows
 them in three places: the menu bar itself, a panel that drops down when you click the
 status item, and a floating overlay you can leave on your desktop.
@@ -20,7 +20,7 @@ across 160 paired samples:
 
 | App | Mean CPU | Memory | Threads |
 | --- | --- | --- | --- |
-| AirStat | 0.046% | 11.0 MB | 5 |
+| AirStats | 0.046% | 11.0 MB | 5 |
 | iStat Menus (suite) | 0.116% | 64.0 MB | 11 |
 | Stats 3.0.9 | 1.931% | 144.8 MB | 15 |
 
@@ -40,8 +40,8 @@ against an independent kernel source (`vm_stat`, `sysctl`, `netstat -ib`, `ioreg
 
 ```sh
 Scripts/build.sh release
-cp -R .build/arm64-apple-macosx/release/AirStat.app /Applications/
-open /Applications/AirStat.app
+cp -R .build/arm64-apple-macosx/release/AirStats.app /Applications/
+open /Applications/AirStats.app
 ```
 
 `Scripts/build.sh` wraps the SwiftPM binary in a `.app` bundle and signs it ad hoc.
@@ -54,9 +54,9 @@ The binary samples collectors and draws its own UI offscreen.
 
 ```sh
 swift test                                  # 32 tests, some of which read real sensors
-.build/debug/AirStat --probe cpu --repeat 5 # sample a collector and print what it got
-.build/debug/AirStat --render panel --dark  # write PNGs of a surface to ./render
-.build/debug/AirStat --help
+.build/debug/AirStats --probe cpu --repeat 5 # sample a collector and print what it got
+.build/debug/AirStats --render panel --dark  # write PNGs of a surface to ./render
+.build/debug/AirStats --help
 ```
 
 `--probe` prints raw collector output so you can diff it against `top`, `vm_stat`,
@@ -73,7 +73,7 @@ for a second during spin-down.
 | --- | --- |
 | `Sources/AirStatKit` | Collectors, the sampling engine, settings, formatting. No UI. |
 | `Sources/AirStatUI` | Menu bar drawing, panel, overlay, settings window, charts, design system. |
-| `Sources/AirStat` | The executable, app delegate, and the probe and render commands. |
+| `Sources/AirStats` | The executable, app delegate, and the probe and render commands. |
 | `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
 

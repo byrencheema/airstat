@@ -3,7 +3,7 @@ import AirStatKit
 
 /// Command-line entry points used for verification and debugging.
 ///
-/// `AirStat --probe` samples the collectors and prints what they produced, so any
+/// `AirStats --probe` samples the collectors and prints what they produced, so any
 /// metric can be checked against `top`, `vm_stat`, `netstat -ib`, `ioreg`, `pmset`
 /// and `system_profiler` without launching the UI.
 enum DiagnosticsCLI {
@@ -29,11 +29,11 @@ enum DiagnosticsCLI {
     }
 
     private static let usage = """
-    AirStat — macOS system statistics
+    AirStats — macOS system statistics
 
-      AirStat                                launch the menu bar app
-      AirStat --probe [collectors…] [flags]  sample collectors and print results
-      AirStat --render [surfaces…] [flags]   render UI surfaces to PNG (no screen needed)
+      AirStats                                launch the menu bar app
+      AirStats --probe [collectors…] [flags]  sample collectors and print results
+      AirStats --render [surfaces…] [flags]   render UI surfaces to PNG (no screen needed)
 
     Probe collectors:
       \(CollectorID.allCases.map(\.rawValue).joined(separator: ", "))
@@ -52,9 +52,9 @@ enum DiagnosticsCLI {
       --scale N       backing scale, repeatable (omit for 1 and 2)
 
     Examples:
-      AirStat --probe cpu --repeat 5 --interval 1 --verbose
-      AirStat --probe network disk
-      AirStat --render panel --scenario nominal --dark --scale 2 --out /tmp/shots
+      AirStats --probe cpu --repeat 5 --interval 1 --verbose
+      AirStats --probe network disk
+      AirStats --render panel --scenario nominal --dark --scale 2 --out /tmp/shots
     """
 
     private static func runProbe(_ arguments: [String]) {

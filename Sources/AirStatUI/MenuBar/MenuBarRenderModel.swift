@@ -48,30 +48,24 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var primary: MenuBarLine
     /// Second value, set only for the two-number metrics.
     public var secondary: MenuBarLine?
-    /// 0...1 for bar/ring styles. Nil when the metric has no natural maximum.
-    public var fraction: Double?
     /// Set when the metric is unavailable; the view greys the readout and shows a dash.
     public var isUnavailable: Bool
     public var symbolName: String?
-    /// User override for graph styles, in points. Nil uses the style's natural width.
-    public var graphWidth: Double?
     public var accessibilityLabel: String
 
     public init(id: UUID, style: MenuBarDisplayStyle,
                 tint: ThemeColor? = nil, caption: String?,
-                primary: MenuBarLine, secondary: MenuBarLine? = nil, fraction: Double?,
+                primary: MenuBarLine, secondary: MenuBarLine? = nil,
                 isUnavailable: Bool, symbolName: String?,
-                graphWidth: Double? = nil, accessibilityLabel: String) {
+                accessibilityLabel: String) {
         self.id = id
         self.style = style
         self.tint = tint
         self.caption = caption
         self.primary = primary
         self.secondary = secondary
-        self.fraction = fraction
         self.isUnavailable = isUnavailable
         self.symbolName = symbolName
-        self.graphWidth = graphWidth
         self.accessibilityLabel = accessibilityLabel
     }
 
@@ -94,37 +88,36 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 settings: Settings,
                 isStale: Bool) {
         let formatter = MetricFormatter(settings: settings.general)
-        self.spacing = settings.menuBar.itemSpacing
+        self.spacing = MenuBarSettings.itemSpacing
         self.usesMonospacedDigits = MenuBarSettings.usesMonospacedDigits
-        self.usesFixedWidth = settings.menuBar.usesFixedWidth
+        self.usesFixedWidth = MenuBarSettings.usesFixedWidth
         self.isStale = isStale
 
         var rendered: [MenuBarItemRender] = []
         rendered.reserveCapacity(settings.menuBar.items.count)
         for config in settings.menuBar.enabledItems {
-            guard let item = MenuBarRenderModel.render(config: config,
-                                                       snapshot: snapshot,
-                                                       history: history,
-                                                       formatter: formatter,
-                                                       settings: settings) else { continue }
-            rendered.append(item)
+            rendered.append(MenuBarRenderModel.render(config: config,
+                                                      snapshot: snapshot,
+                                                      history: history,
+                                                      formatter: formatter,
+                                                      settings: settings))
         }
         self.items = rendered
     }
 
-    /// Builds one readout, or nil when the user asked to hide idle readouts and
-    /// this one is at rest.
+    /// Builds one readout. Every enabled item produces one: nothing here decides an
+    /// item is not worth drawing, because a readout that comes and goes on its own is
+    /// the thing that makes the whole bar shuffle.
     private static func render(config: MenuBarItemConfig,
                                snapshot: SystemSnapshot,
                                history: MetricHistory,
                                formatter: MetricFormatter,
-                               settings: Settings) -> MenuBarItemRender? {
+                               settings: Settings) -> MenuBarItemRender {
         let metric = config.metric
         let dash = MetricFormatter.unavailable
         let widest = formatter.widestSample(for: metric)
 
         var valueText = dash
-        var fraction: Double?
         var seriesKey: SeriesKey?
         var unavailable = true
         // Named, not a bare "unavailable": VoiceOver reads the whole item as one string,
@@ -138,7 +131,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .cpuUsage:
             if let cpu = snapshot.cpu.value {
                 let busy = cpu.total.busy
-                fraction = busy
                 valueText = formatter.percent(busy)
                 unavailable = false
                 accessibilityValue = "CPU \(valueText)"
@@ -148,7 +140,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .cpuTemperature:
             if let temp = snapshot.thermal.value?.cpuCelsius {
                 valueText = formatter.temperature(temp)
-                fraction = min(max(temp / 110, 0), 1)
                 unavailable = false
                 accessibilityValue = "CPU temperature \(valueText)"
             }
@@ -160,7 +151,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
 
         case .memoryUsage:
             if let mem = snapshot.memory.value {
-                fraction = mem.usedFraction
                 valueText = formatter.percent(mem.usedFraction)
                 unavailable = false
                 accessibilityValue = "Memory \(valueText)"
@@ -169,7 +159,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
 
         case .memoryPressure:
             if let mem = snapshot.memory.value {
-                fraction = mem.pressureFraction
                 valueText = formatter.percent(mem.pressureFraction)
                 unavailable = false
                 accessibilityValue = "Memory pressure \(valueText)"
@@ -178,7 +167,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
 
         case .gpuUsage:
             if let util = snapshot.gpu.value?.primary?.utilization {
-                fraction = util
                 valueText = formatter.percent(util)
                 unavailable = false
                 accessibilityValue = "GPU \(valueText)"
@@ -208,7 +196,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             return finish(config: config, caption: nil,
                           primary: MenuBarLine(glyph: "↓", valueText: valueText,
                                                widestText: rateWidest, series: pair.0),
-                          secondary: secondary, fraction: nil,
+                          secondary: secondary,
                           unavailable: unavailable, accessibility: accessibilityValue,
                           settings: settings)
 
@@ -244,22 +232,19 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             return finish(config: config, caption: nil,
                           primary: MenuBarLine(glyph: "R", valueText: valueText,
                                                widestText: rateWidest, series: pair.0),
-                          secondary: secondary, fraction: nil,
+                          secondary: secondary,
                           unavailable: unavailable, accessibility: accessibilityValue,
                           settings: settings)
 
         case .diskFree:
             if let root = snapshot.disk.value?.rootVolume {
                 valueText = formatter.storage(root.availableBytes)
-                let freeFraction = root.totalBytes > 0 ? Double(root.availableBytes) / Double(root.totalBytes) : 0
-                fraction = 1 - freeFraction
                 unavailable = false
                 accessibilityValue = "Disk free \(valueText)"
             }
 
         case .battery:
             if let power = snapshot.power.value, let pct = power.percentage {
-                fraction = pct / 100
                 valueText = formatter.percentValue(pct)
                 unavailable = false
                 accessibilityValue = power.isCharging ? "Battery \(valueText) charging" : "Battery \(valueText)"
@@ -287,7 +272,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .fanSpeed:
             if let fan = snapshot.thermal.value?.fans.first {
                 valueText = formatter.rpm(fan.currentRPM)
-                fraction = fan.loadFraction
                 unavailable = false
                 accessibilityValue = "Fan \(valueText)"
             }
@@ -305,7 +289,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         return finish(config: config, caption: caption(for: config),
                       primary: MenuBarLine(valueText: valueText, widestText: widest,
                                            series: series),
-                      secondary: nil, fraction: fraction,
+                      secondary: nil,
                       unavailable: unavailable, accessibility: accessibilityValue,
                       settings: settings)
     }
@@ -314,15 +298,10 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                caption: String?,
                                primary: MenuBarLine,
                                secondary: MenuBarLine?,
-                               fraction: Double?,
                                unavailable: Bool,
                                accessibility: String,
-                               settings: Settings) -> MenuBarItemRender? {
-        if settings.menuBar.hidesIdleItems, !unavailable,
-           let fraction, fraction < settings.menuBar.idleThreshold {
-            return nil
-        }
-        return MenuBarItemRender(
+                               settings: Settings) -> MenuBarItemRender {
+        MenuBarItemRender(
             id: config.id,
             style: config.style,
             // Only a colour the user actually picked. The shipped metric colours stay
@@ -333,10 +312,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             caption: caption,
             primary: primary,
             secondary: secondary,
-            fraction: fraction,
             isUnavailable: unavailable,
             symbolName: symbolName(for: config.metric),
-            graphWidth: config.graphWidth,
             accessibilityLabel: accessibility
         )
     }
@@ -345,22 +322,22 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     /// static word is the most expensive thing on it. So it is strictly what the user
     /// asked for — `showsCaption`, and nothing else, decides.
     ///
-    /// The exception is the icon styles, which still refuse: a glyph already names the
+    /// The exception is `.iconAndText`, which still refuses: a glyph already names the
     /// metric, so "CPU" beside a CPU icon says it twice.
-    ///
-    /// `.text` honours the toggle rather than refusing it. It was briefly excluded on
-    /// the reasoning that a caption beside a number makes the item read as two labels
-    /// and a value — true when it is forced on everyone, but this is opt-in and off by
-    /// default, and "CPU 34%" is the readout some people want precisely because it
-    /// survives being glanced at next to a dozen other status items.
     private static func caption(for config: MenuBarItemConfig) -> String? {
         switch config.style {
-        case .icon, .iconAndText:
+        case .iconAndText:
             return nil
-        case .text, .textAndGraph, .graph, .bar, .ring:
+        case .text, .textAndGraph, .graph:
             guard config.showsCaption else { return nil }
         }
-        switch config.metric {
+        return captionText(for: config.metric)
+    }
+
+    /// The short label a metric is captioned with. Public so the settings pane can
+    /// quote the exact string the menu bar will draw rather than describing it.
+    public static func captionText(for metric: MenuBarMetric) -> String? {
+        switch metric {
         case .cpuUsage: return "CPU"
         case .cpuTemperature: return "TEMP"
         case .cpuFrequency: return "FREQ"

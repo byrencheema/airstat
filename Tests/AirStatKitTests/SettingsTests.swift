@@ -57,10 +57,16 @@ struct SettingsDecodingTests {
 
     @Test("a style the metric no longer supports is corrected")
     func incompatibleStyleIsCorrected() {
-        // Throughput has no natural maximum, so a ring would be meaningless.
-        let item = MenuBarItemConfig(metric: .networkThroughput, style: .ring)
-        #expect(!MenuBarMetric.networkThroughput.supportedStyles.contains(.ring))
-        #expect(item.sanitized().style != .ring)
+        // Uptime keeps no series, so there is nothing for a graph to plot.
+        let item = MenuBarItemConfig(metric: .uptime, style: .graph)
+        #expect(!MenuBarMetric.uptime.supportedStyles.contains(.graph))
+        #expect(item.sanitized().style != .graph)
+    }
+
+    @Test("a retired style in a stored file lands on one the metric supports")
+    func retiredStyleIsMigrated() throws {
+        let settings = try decode(#"{"menuBar":{"items":[{"metric":"cpuUsage","style":"ring"}]}}"#)
+        #expect(MenuBarMetric.cpuUsage.supportedStyles.contains(settings.menuBar.items[0].style))
     }
 
     @Test("round-trips without loss")
@@ -68,7 +74,7 @@ struct SettingsDecodingTests {
         var original = Settings()
         original.general.temperatureUnit = .fahrenheit
         original.overlay.isEnabled = true
-        original.menuBar.items.append(MenuBarItemConfig(metric: .gpuUsage, style: .ring))
+        original.menuBar.items.append(MenuBarItemConfig(metric: .gpuUsage, style: .graph))
         let data = try JSONEncoder().encode(original)
         let restored = try JSONDecoder().decode(Settings.self, from: data)
         #expect(restored == original)

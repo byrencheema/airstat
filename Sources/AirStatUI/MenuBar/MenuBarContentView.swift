@@ -17,8 +17,7 @@ import AirStatKit
 ///
 /// Nothing is drawn that is not known. A sparkline with no samples is omitted, not
 /// flattened to a baseline: a full-width horizontal rule is indistinguishable from a
-/// metric pinned at zero, and an empty bar or ring reads as 0% for the same reason.
-/// An unavailable readout collapses to a single dash.
+/// metric pinned at zero. An unavailable readout collapses to a single dash.
 ///
 /// Everything lands on device pixels. At 1x a half-pixel baseline is the difference
 /// between a crisp readout and a smeared one, and this sits two pixels from Apple's
@@ -46,13 +45,10 @@ public final class MenuBarContentView: NSView {
         /// its number, a caption and what it captions. Four gaps in a deliberate ladder
         /// is what makes the grouping legible: 2 binds a glyph to its number, 4 binds
         /// the parts of one readout, 6 binds the two directions of a paired one, and
-        /// the user's item spacing (8 by default) separates whole readouts.
+        /// the 8 between status items separates whole readouts.
         static let partGap = Design.Space.xs
         static let glyphGap = Design.Space.xxs
         static let pairGap = Design.Space.s
-        static let barWidth: CGFloat = 5
-        static let barHeight: CGFloat = 12
-        static let ringDiameter: CGFloat = 13
         static let symbolSize: CGFloat = 13
         /// Never let the item shrink to a target too small to click.
         static let minimumWidth: CGFloat = 24
@@ -61,8 +57,6 @@ public final class MenuBarContentView: NSView {
         static let unavailableAlpha: CGFloat = 0.4
         /// Dimmer than live, brighter than absent: the number is real, just old.
         static let staleAlpha: CGFloat = 0.55
-        /// The unfilled part of a bar or ring.
-        static let trackAlpha: CGFloat = 0.3
         /// Denser than `Design.Chart.fillOpacity` because this plot is 11 points tall,
         /// not 28 — at the panel's opacity the fill vanishes at 1x. Not much denser: a
         /// metric that sits at 76% fills three quarters of the box, and past about a
@@ -147,7 +141,6 @@ public final class MenuBarContentView: NSView {
         var primaryValue: CGFloat = 0
         var secondaryGlyph: CGFloat = 0
         var secondaryValue: CGFloat = 0
-        var indicator: CGFloat = 0
         /// Width of the caption-above-value column, when the item stacks. The caption
         /// and the number share this one slot instead of taking a slot each, so the
         /// item is as wide as the wider of the two rather than as wide as their sum.
@@ -170,7 +163,6 @@ public final class MenuBarContentView: NSView {
             append(primaryValue, after: primaryGlyph > 0 ? Layout.glyphGap : Layout.partGap)
             append(secondaryGlyph, after: Layout.pairGap)
             append(secondaryValue, after: secondaryGlyph > 0 ? Layout.glyphGap : Layout.pairGap)
-            append(indicator, after: Layout.partGap)
             return total
         }
     }
@@ -192,28 +184,17 @@ public final class MenuBarContentView: NSView {
             geometry.caption = width(caption, role: .caption)
         }
 
-        // An unavailable readout collapses to one dash: no graph of history that is not
-        // there, no empty bar that reads as zero, and no width reserved for a number
-        // that is absent. Width still cannot move as a *value* changes — only when a
-        // metric appears or disappears, which is a sensor event, not a per-sample one.
+        // An unavailable readout collapses to one dash: no graph of history that is
+        // not there, and no width reserved for a number that is absent. Width still
+        // cannot move as a *value* changes — only when a metric appears or disappears,
+        // which is a sensor event, not a per-sample one.
         guard !item.isUnavailable else {
-            if item.style == .icon, let symbol {
-                geometry.symbol = ceil(symbol.size.width)
-            } else {
-                geometry.primaryValue = width(MetricFormatter.unavailable, role: .value)
-            }
+            geometry.primaryValue = width(MetricFormatter.unavailable, role: .value)
             return geometry
         }
 
         if let symbol { geometry.symbol = ceil(symbol.size.width) }
-        if hasGraph(item) {
-            geometry.graph = item.graphWidth.map { CGFloat($0) } ?? Layout.graphWidth
-        }
-        switch item.style {
-        case .bar: geometry.indicator = Layout.barWidth
-        case .ring: geometry.indicator = Layout.ringDiameter
-        default: break
-        }
+        if hasGraph(item) { geometry.graph = Layout.graphWidth }
 
         guard item.style.drawsValue else { return geometry }
 
@@ -369,21 +350,6 @@ public final class MenuBarContentView: NSView {
                       baseline: baseline, color: colors.value, scale: scale, context: context)
             x += geometry.secondaryValue
         }
-
-        guard geometry.indicator > 0 else { return }
-        gap(Layout.partGap)
-        switch item.style {
-        case .bar:
-            drawBar(item, color: colors.mark,
-                    in: CGRect(x: x, y: bounds.midY - Layout.barHeight / 2,
-                               width: Layout.barWidth, height: Layout.barHeight),
-                    scale: scale, context: context)
-        default:
-            drawRing(item, color: colors.mark,
-                     in: CGRect(x: x, y: bounds.midY - Layout.ringDiameter / 2,
-                                width: Layout.ringDiameter, height: Layout.ringDiameter),
-                     scale: scale, context: context)
-        }
     }
 
     /// Right-aligned inside the width reserved for it. A short value leaves slack, and
@@ -445,7 +411,7 @@ public final class MenuBarContentView: NSView {
 
     /// What one item paints each of its parts with.
     private struct ItemColors {
-        /// Graphs, bars, rings and the item's symbol.
+        /// Graphs and the item's symbol.
         let mark: NSColor
         let value: CGColor
         /// The direction arrow bound to a value, dimmed but the value's colour.
@@ -470,12 +436,12 @@ public final class MenuBarContentView: NSView {
 
         /// The colours one item draws with.
         ///
-        /// A metric's colour reaches its marks, its number and the ↑/↓ glyph that says
-        /// which number it is — and stops at the caption. "CPU" is not a measurement,
-        /// it is the label on one, and colouring it says nothing the coloured number
-        /// beside it has not already said while costing a word of legibility on the one
-        /// surface with none to spare. So captions stay in the bar's own tint, and nine
-        /// coloured readouts still share one consistent set of labels.
+        /// A metric's colour reaches everything the item draws, the caption included.
+        /// The caption is the part that most needs it: "CPU" set at eight points above
+        /// a number is the smallest text on the bar, and its colour is what lets the
+        /// eye find the readout it wants without reading any of the labels. The number
+        /// stays at full strength and the caption sits back at 65% of it, so the pair
+        /// reads as one readout in one colour rather than as two things.
         func colors(for item: MenuBarItemRender) -> ItemColors {
             guard var override = override(for: item) else {
                 return ItemColors(mark: base, value: solid, glyph: muted, caption: muted)
@@ -486,11 +452,10 @@ public final class MenuBarContentView: NSView {
             if base.alphaComponent < 1 {
                 override = override.withAlphaComponent(override.alphaComponent * base.alphaComponent)
             }
-            return ItemColors(
-                mark: override,
-                value: override.cgColor,
-                glyph: override.withAlphaComponent(override.alphaComponent * Layout.captionAlpha).cgColor,
-                caption: muted)
+            let dimmed = override.withAlphaComponent(
+                override.alphaComponent * Layout.captionAlpha).cgColor
+            return ItemColors(mark: override, value: override.cgColor,
+                              glyph: dimmed, caption: dimmed)
         }
 
         /// Nil whenever the item draws in the bar's own tint, which is the overwhelming
@@ -585,48 +550,6 @@ public final class MenuBarContentView: NSView {
         return true
     }
 
-    // MARK: Indicators
-
-    private func drawBar(_ item: MenuBarItemRender, color: NSColor, in rect: CGRect,
-                         scale: CGFloat, context: CGContext) {
-        let box = snapped(rect, scale: scale)
-        let radius = box.width / 2
-        context.addPath(CGPath(roundedRect: box, cornerWidth: radius, cornerHeight: radius,
-                               transform: nil))
-        context.setFillColor(color.withAlphaComponent(Layout.trackAlpha).cgColor)
-        context.fillPath()
-
-        guard let fraction = item.fraction, fraction > 0 else { return }
-        let height = max(box.height * CGFloat(min(fraction, 1)), box.width)
-        let fill = CGRect(x: box.minX, y: box.minY, width: box.width, height: height)
-        context.addPath(CGPath(roundedRect: fill, cornerWidth: radius, cornerHeight: radius,
-                               transform: nil))
-        context.setFillColor(color.cgColor)
-        context.fillPath()
-    }
-
-    private func drawRing(_ item: MenuBarItemRender, color: NSColor, in rect: CGRect,
-                          scale: CGFloat, context: CGContext) {
-        let lineWidth = max(2, 2 / scale)
-        let box = snapped(rect, scale: scale)
-        let center = CGPoint(x: box.midX, y: box.midY)
-        let radius = (box.width - lineWidth) / 2
-
-        context.setLineWidth(lineWidth)
-        context.setLineCap(.round)
-        context.setStrokeColor(color.withAlphaComponent(Layout.trackAlpha).cgColor)
-        context.addArc(center: center, radius: radius, startAngle: 0, endAngle: .pi * 2,
-                       clockwise: false)
-        context.strokePath()
-
-        guard let fraction = item.fraction, fraction > 0 else { return }
-        let start = CGFloat.pi / 2
-        context.setStrokeColor(color.cgColor)
-        context.addArc(center: center, radius: radius, startAngle: start,
-                       endAngle: start - CGFloat(min(fraction, 1)) * .pi * 2, clockwise: true)
-        context.strokePath()
-    }
-
     private func draw(_ image: NSImage, color: NSColor, at center: CGPoint, scale: CGFloat) {
         let size = image.size
         let rect = CGRect(x: snap(center.x, scale),
@@ -684,8 +607,7 @@ public final class MenuBarContentView: NSView {
     }
 
     private func symbol(for item: MenuBarItemRender) -> NSImage? {
-        guard item.style == .icon || item.style == .iconAndText,
-              let name = item.symbolName else { return nil }
+        guard item.style == .iconAndText, let name = item.symbolName else { return nil }
         if let cached = symbolCache[name] { return cached }
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil),
               let configured = image.withSymbolConfiguration(
@@ -772,7 +694,7 @@ private extension MenuBarDisplayStyle {
     var drawsValue: Bool {
         switch self {
         case .text, .textAndGraph, .iconAndText: return true
-        case .graph, .bar, .ring, .icon: return false
+        case .graph: return false
         }
     }
 }

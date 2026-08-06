@@ -372,7 +372,17 @@ struct SettingsListRow<Content: View>: View {
                 .padding(.horizontal, Design.Space.m)
                 .padding(.vertical, Design.Space.s)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(isSelected ? Design.Palette.accent.opacity(0.18) : Color.clear)
+                .background {
+                    if isSelected {
+                        // The tint alone was not enough to say "this row is the one the
+                        // controls below are editing" — at 18% it reads as a hover
+                        // state. The bar is what makes the selection an assertion.
+                        ZStack(alignment: .leading) {
+                            Design.Palette.accent.opacity(0.18)
+                            Design.Palette.accent.frame(width: 3)
+                        }
+                    }
+                }
                 .contentShape(Rectangle())
         }
     }

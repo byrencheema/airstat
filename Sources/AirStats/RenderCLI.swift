@@ -2,7 +2,7 @@ import AppKit
 import AirStatKit
 import AirStatUI
 
-/// `AirStat --render` writes PNGs of every surface without needing a screen or a
+/// `AirStats --render` writes PNGs of every surface without needing a screen or a
 /// Screen Recording grant, using deterministic fixture data.
 enum RenderCLI {
 

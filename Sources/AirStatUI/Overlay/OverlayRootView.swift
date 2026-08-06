@@ -56,7 +56,7 @@ struct OverlayRootView: View {
         .animation(Design.Motion.respectingAccessibility(Design.Motion.hover),
                    value: layout?.isGrabbable ?? false)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("AirStat overlay")
+        .accessibilityLabel("AirStats overlay")
     }
 
     private var shape: RoundedRectangle {

@@ -4,7 +4,7 @@ import AirStatUI
 
 /// Wires the engine, the settings store and every piece of UI together, and owns
 /// the system-level observers (sleep, wake, screen lock, display changes) that
-/// decide how hard AirStat is allowed to work.
+/// decide how hard AirStats is allowed to work.
 @MainActor
 final class AppCoordinator {
 
@@ -97,7 +97,7 @@ final class AppCoordinator {
         overlayItem.target = self
         overlayItem.state = settingsStore.settings.overlay.isEnabled ? .on : .off
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit AirStat", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit AirStats", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.presentMenu(menu)
     }
 

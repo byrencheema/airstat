@@ -15,18 +15,25 @@ CONFIG="${1:-debug}"
 swift build -c "$CONFIG" "${@:2}"
 
 BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
-APP="$BIN_DIR/AirStat.app"
+APP="$BIN_DIR/AirStats.app"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BIN_DIR/AirStat" "$APP/Contents/MacOS/AirStat"
+cp "$BIN_DIR/AirStats" "$APP/Contents/MacOS/AirStats"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 if [ -f Resources/AppIcon.icns ]; then
   cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
+
+# SwiftPM emits the UI target's resources as a bundle beside the binary. It has to
+# travel into Contents/Resources or `Bundle.module` finds nothing at runtime and the
+# app launches without its own mark.
+for bundle in "$BIN_DIR"/*_AirStatUI.bundle; do
+  [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
+done
 
 # Ad-hoc signature. Without any signature macOS refuses some window-server
 # privileges a status item needs.

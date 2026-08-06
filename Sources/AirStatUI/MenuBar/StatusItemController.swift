@@ -40,7 +40,7 @@ public final class StatusItemController {
         button.action = #selector(handleClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.setAccessibilityRole(.button)
-        button.setAccessibilityLabel("AirStat system statistics")
+        button.setAccessibilityLabel("AirStats system statistics")
 
         let content = MenuBarContentView(frame: .zero)
         content.translatesAutoresizingMaskIntoConstraints = false

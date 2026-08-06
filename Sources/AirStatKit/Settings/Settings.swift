@@ -124,29 +124,30 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
         }
     }
 
-    /// Styles that make sense for this metric. A rate has no natural maximum, so a
-    /// ring or bar would be meaningless for network throughput.
+    /// Styles that make sense for this metric. Only the metrics that keep a series
+    /// can be graphed; the rest are a number, with or without their icon.
     public var supportedStyles: [MenuBarDisplayStyle] {
         switch self {
-        case .networkThroughput, .networkUpload, .networkDownload, .diskActivity:
-            return [.text, .graph, .textAndGraph, .icon, .iconAndText]
-        case .uptime, .batteryTime, .cpuFrequency:
-            return [.text, .icon, .iconAndText]
-        case .diskFree:
-            return [.text, .bar, .ring, .icon, .iconAndText]
+        case .uptime, .batteryTime, .cpuFrequency, .diskFree:
+            return [.text, .iconAndText]
         default:
             return MenuBarDisplayStyle.allCases
         }
     }
 }
 
+/// How one readout draws.
+///
+/// Four, where there were seven. Bar and Ring drew the same fraction a graph draws,
+/// smaller and without the history, and neither said what the fraction was of — a 5pt
+/// bar beside a 5pt bar is two anonymous slivers. Icon-alone was worse: a stats app
+/// whose readout is an icon is showing a picture of a metric instead of the metric.
+/// What is left is the number, the number's history, and the number with a mark
+/// saying which metric it is.
 public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
     case text
     case graph
     case textAndGraph
-    case bar
-    case ring
-    case icon
     case iconAndText
 
     public var label: String {
@@ -154,9 +155,6 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
         case .text: return "Text"
         case .graph: return "Graph"
         case .textAndGraph: return "Text & Graph"
-        case .bar: return "Bar"
-        case .ring: return "Ring"
-        case .icon: return "Icon"
         case .iconAndText: return "Icon & Text"
         }
     }
@@ -167,19 +165,15 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
     public var metric: MenuBarMetric
     public var style: MenuBarDisplayStyle
     public var isEnabled: Bool
-    /// Width in points for graph styles. Nil uses the style's natural width.
-    public var graphWidth: Double?
-    /// Show the short caption ("CPU") next to the value.
+    /// Draw the metric's name above its number.
     public var showsCaption: Bool
 
     public init(id: UUID = UUID(), metric: MenuBarMetric, style: MenuBarDisplayStyle = .text,
-                isEnabled: Bool = true,
-                graphWidth: Double? = nil, showsCaption: Bool = false) {
+                isEnabled: Bool = true, showsCaption: Bool = true) {
         self.id = id
         self.metric = metric
         self.style = style
         self.isEnabled = isEnabled
-        self.graphWidth = graphWidth
         self.showsCaption = showsCaption
     }
 
@@ -190,56 +184,56 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
         if !metric.supportedStyles.contains(style) {
             copy.style = metric.supportedStyles.first ?? .text
         }
-        if let w = graphWidth { copy.graphWidth = min(max(w, 20), 120) }
         return copy
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, metric, style, isEnabled, graphWidth, showsCaption
+        case id, metric, style, isEnabled, showsCaption
     }
 
+    /// A file written by an older build carries a `graphWidth` and may carry a style
+    /// that no longer exists. Neither is an error: the unknown key is not read, and
+    /// `sanitized()` moves the retired style to one this metric still supports.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.value(.id, or: UUID())
         metric = c.value(.metric, or: MenuBarMetric.cpuUsage)
         style = c.value(.style, or: MenuBarDisplayStyle.text)
         isEnabled = c.value(.isEnabled, or: true)
-        graphWidth = try? c.decodeIfPresent(Double.self, forKey: .graphWidth)
-        showsCaption = c.value(.showsCaption, or: false)
+        showsCaption = c.value(.showsCaption, or: true)
     }
 }
 
 public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var items: [MenuBarItemConfig]
-    /// Points of padding between adjacent readouts inside one status item.
-    public var itemSpacing: Double
     /// Use a single status item for everything (tidier, survives menu bar crowding)
     /// versus one status item per metric (individually re-orderable by the user).
     public var usesCombinedItem: Bool
-    /// Hide readouts whose value is at rest, to keep the menu bar quiet.
-    public var hidesIdleItems: Bool
-    /// Value below which a readout counts as idle, 0...1.
-    public var idleThreshold: Double
-    /// Reserve width for the widest plausible value so items never reflow.
-    public var usesFixedWidth: Bool
 
     /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
     /// proportional digits shimmers as it changes, which is the single most visible
     /// cheapness tell in a stats app, and nobody was ever going to want it.
     public static let usesMonospacedDigits = true
 
+    /// Four settings, gone. Each governed one dimension of how the bar is packed, and
+    /// between them they were the reason a readout could move, resize or vanish while
+    /// the user was looking at it — the one thing a menu bar must never do.
+    ///
+    /// Previously `usesFixedWidth`. Always on: without it every readout resizes as its
+    /// own value changes and drags everything to its right along with it.
+    public static let usesFixedWidth = true
+    /// Previously `itemSpacing`, a 0–24 slider. 8 is the gap AppKit puts between its
+    /// own status items, which is the gap this has to match to look like it belongs.
+    public static let itemSpacing: Double = 8
+    /// Previously `hidesIdleItems` and `idleThreshold`. A readout that removes itself
+    /// when it goes quiet takes the whole bar with it every time it comes back, and
+    /// the moment a metric is worth watching is not reliably the moment it is high.
+    public static let hidesIdleItems = false
+
     public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
-                itemSpacing: Double = 8,
-                usesCombinedItem: Bool = true,
-                hidesIdleItems: Bool = false,
-                idleThreshold: Double = 0.02,
-                usesFixedWidth: Bool = true) {
+                usesCombinedItem: Bool = true) {
         self.items = items
-        self.itemSpacing = itemSpacing
         self.usesCombinedItem = usesCombinedItem
-        self.hidesIdleItems = hidesIdleItems
-        self.idleThreshold = idleThreshold
-        self.usesFixedWidth = usesFixedWidth
     }
 
     /// Two readouts, not three.
@@ -249,32 +243,32 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// notched display when a few other extras are present. CPU and memory are what a
     /// stats app is for; network stays one click away in Settings for those who want it.
     ///
-    /// Both carry an icon because two bare percentages side by side say nothing about
-    /// which is which, and an SF Symbol identifies a readout in roughly half the width a
-    /// "CPU"/"MEM" caption costs. The default drops the sparkline for the same reason:
-    /// at 34pt wide it reads as a scribble, and it was the single widest element left.
+    /// Both carry their name above their number rather than an icon beside it. An icon
+    /// is a guess the reader has to make — a chip glyph is CPU to whoever drew it and
+    /// "some hardware" to everyone else — while "CPU" is four narrow characters set at
+    /// eight points in the metric's own colour, above the number, in a column the
+    /// number was already paying for. The default drops the sparkline: at 34pt wide it
+    /// reads as a scribble, and it was the single widest element left.
     public static let defaultItems: [MenuBarItemConfig] = [
-        MenuBarItemConfig(metric: .cpuUsage, style: .iconAndText),
-        MenuBarItemConfig(metric: .memoryUsage, style: .iconAndText),
+        MenuBarItemConfig(metric: .cpuUsage, style: .text, showsCaption: true),
+        MenuBarItemConfig(metric: .memoryUsage, style: .text, showsCaption: true),
     ]
 
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 
     private enum CodingKeys: String, CodingKey {
-        case items, itemSpacing, usesCombinedItem, hidesIdleItems, idleThreshold
-        case usesFixedWidth
+        case items, usesCombinedItem
     }
 
+    /// Files written before the packing settings were removed still load: the keys
+    /// they carry for spacing, fixed width and quiet mode are simply not read, and an
+    /// unknown key has never been an error here.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let decodedItems = c.value(.items, or: MenuBarSettings.defaultItems)
         // An empty menu bar would leave the user with no way back into the app.
         items = decodedItems.isEmpty ? MenuBarSettings.defaultItems : decodedItems.map { $0.sanitized() }
-        itemSpacing = min(max(c.value(.itemSpacing, or: 8.0), 0), 24)
         usesCombinedItem = c.value(.usesCombinedItem, or: true)
-        hidesIdleItems = c.value(.hidesIdleItems, or: false)
-        idleThreshold = min(max(c.value(.idleThreshold, or: 0.02), 0), 1)
-        usesFixedWidth = c.value(.usesFixedWidth, or: true)
     }
 }
 

@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "AirStat",
+    name: "AirStats",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "AirStat", targets: ["AirStat"]),
+        .executable(name: "AirStats", targets: ["AirStats"]),
         .library(name: "AirStatKit", targets: ["AirStatKit"]),
         .library(name: "AirStatUI", targets: ["AirStatUI"]),
     ],
@@ -25,10 +25,11 @@ let package = Package(
         .target(
             name: "AirStatUI",
             dependencies: ["AirStatKit"],
+            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "AirStat",
+            name: "AirStats",
             dependencies: ["AirStatKit", "AirStatUI"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

@@ -351,7 +351,7 @@ final class PanelWindow: NSPanel {
         // the system's own menu bar extras do.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         isMovableByWindowBackground = false
-        title = "AirStat Panel"
+        title = "AirStats Panel"
 
         // `.hudWindow` rather than `.menu`: the panel is not a menu, and the menu
         // material is nearly opaque — what is behind the panel should be visible

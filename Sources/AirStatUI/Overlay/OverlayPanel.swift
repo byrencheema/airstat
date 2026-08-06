@@ -44,7 +44,7 @@ final class OverlayPanel: NSPanel {
         // exactly where the overlay has to snap to a corner and persist its position.
         isMovableByWindowBackground = false
         isMovable = true
-        title = "AirStat Overlay"
+        title = "AirStats Overlay"
         self.contentView = contentView
     }
 

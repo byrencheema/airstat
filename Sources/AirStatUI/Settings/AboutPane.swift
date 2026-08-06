@@ -25,19 +25,17 @@ struct AboutPane: View {
         Form {
             Section {
                 HStack(spacing: Design.Space.xl) {
-                    Image(systemName: "gauge.with.dots.needle.33percent")
-                        .font(.system(size: 44, weight: .light))
-                        .foregroundStyle(Design.Palette.accent)
-                        .accessibilityHidden(true)
+                    LogoMark(size: 52)
+                        .foregroundStyle(Design.Palette.primaryText)
                     VStack(alignment: .leading, spacing: Design.Space.xxs) {
-                        Text("AirStat").font(.title2.weight(.medium))
+                        Text("AirStats").font(.title2.weight(.medium))
                         Text(versionText).foregroundStyle(Design.Palette.secondaryText)
                     }
                     Spacer()
                 }
                 .padding(.vertical, Design.Space.xs)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("AirStat, \(versionText)")
+                .accessibilityLabel("AirStats, \(versionText)")
             }
 
             Section {
@@ -98,7 +96,7 @@ struct AboutPane: View {
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("Your menu bar readouts, panel layout, overlay, notification rules and shortcuts all go back to how AirStat shipped.")
+                        Text("Your menu bar readouts, panel layout, overlay, notification rules and shortcuts all go back to how AirStats shipped.")
                     }
             } header: {
                 Text("Reset")
@@ -137,7 +135,7 @@ struct AboutPane: View {
     private func export() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "AirStat Settings.json"
+        panel.nameFieldStringValue = "AirStats Settings.json"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
@@ -161,7 +159,7 @@ struct AboutPane: View {
             transferResult = "Imported from \(url.lastPathComponent)."
         } catch {
             transferFailed = true
-            transferResult = "\(url.lastPathComponent) is not a settings file AirStat can read. Your settings are unchanged."
+            transferResult = "\(url.lastPathComponent) is not a settings file AirStats can read. Your settings are unchanged."
         }
     }
 }
