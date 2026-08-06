@@ -52,12 +52,30 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var isUnavailable: Bool
     public var symbolName: String?
     public var accessibilityLabel: String
+    /// Charge as 0...1, for the `.battery` style. Nil on every other readout.
+    ///
+    /// The three battery fields travel here for the same reason `tint` does, and the
+    /// reason matters more for these: the status item redraws only when this model
+    /// changes, so a battery drawn from a value the view fetched itself would keep
+    /// showing the charge from whenever some *other* readout last moved.
+    public var batteryCharge: Double?
+    /// Power is going in. Drawn as a bolt over the fill.
+    public var isBatteryCharging: Bool
+    /// Charge at or below `MenuBarItemRender.lowBatteryFraction` and not charging.
+    /// Carried rather than recomputed in the view so the threshold lives in one place.
+    public var isBatteryLow: Bool
+
+    /// Where the indicator turns red. 20% is where macOS itself first warns.
+    public static let lowBatteryFraction = 0.20
 
     public init(id: UUID, style: MenuBarDisplayStyle,
                 tint: ThemeColor? = nil, caption: String?,
                 primary: MenuBarLine, secondary: MenuBarLine? = nil,
                 isUnavailable: Bool, symbolName: String?,
-                accessibilityLabel: String) {
+                accessibilityLabel: String,
+                batteryCharge: Double? = nil,
+                isBatteryCharging: Bool = false,
+                isBatteryLow: Bool = false) {
         self.id = id
         self.style = style
         self.tint = tint
@@ -67,6 +85,9 @@ public struct MenuBarItemRender: Equatable, Sendable {
         self.isUnavailable = isUnavailable
         self.symbolName = symbolName
         self.accessibilityLabel = accessibilityLabel
+        self.batteryCharge = batteryCharge
+        self.isBatteryCharging = isBatteryCharging
+        self.isBatteryLow = isBatteryLow
     }
 
 }
@@ -126,6 +147,9 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         // Set only by the two-number metrics; its presence is what makes the readout
         // stack rather than run on.
         var secondary: MenuBarLine?
+        // Set only by the battery metric, whose indicator style draws the charge as a
+        // shape instead of as digits.
+        var battery: BatteryState?
 
         switch metric {
         case .cpuUsage:
@@ -247,7 +271,18 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let power = snapshot.power.value, let pct = power.percentage {
                 valueText = formatter.percentValue(pct)
                 unavailable = false
-                accessibilityValue = power.isCharging ? "Battery \(valueText) charging" : "Battery \(valueText)"
+                let charge = min(max(pct / 100, 0), 1)
+                let isLow = !power.isCharging && charge <= MenuBarItemRender.lowBatteryFraction
+                battery = BatteryState(charge: charge, isCharging: power.isCharging, isLow: isLow)
+                // The indicator style takes the digits off the screen, so this is the
+                // only place the exact charge is still stated. It says everything the
+                // shape says: the number, that power is going in, that it is low.
+                accessibilityValue = "Battery \(valueText)"
+                if power.isCharging {
+                    accessibilityValue += ", charging"
+                } else if isLow {
+                    accessibilityValue += ", low"
+                }
             }
             seriesKey = .batteryPercent
 
@@ -291,7 +326,15 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                            series: series),
                       secondary: nil,
                       unavailable: unavailable, accessibility: accessibilityValue,
-                      settings: settings)
+                      settings: settings, battery: battery)
+    }
+
+    /// What the battery indicator draws, gathered in one place so the three fields can
+    /// only ever be set together.
+    private struct BatteryState {
+        var charge: Double
+        var isCharging: Bool
+        var isLow: Bool
     }
 
     private static func finish(config: MenuBarItemConfig,
@@ -300,7 +343,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                secondary: MenuBarLine?,
                                unavailable: Bool,
                                accessibility: String,
-                               settings: Settings) -> MenuBarItemRender {
+                               settings: Settings,
+                               battery: BatteryState? = nil) -> MenuBarItemRender {
         MenuBarItemRender(
             id: config.id,
             style: config.style,
@@ -314,7 +358,10 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             secondary: secondary,
             isUnavailable: unavailable,
             symbolName: symbolName(for: config.metric),
-            accessibilityLabel: accessibility
+            accessibilityLabel: accessibility,
+            batteryCharge: battery?.charge,
+            isBatteryCharging: battery?.isCharging ?? false,
+            isBatteryLow: battery?.isLow ?? false
         )
     }
 
@@ -322,15 +369,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     /// static word is the most expensive thing on it. So it is strictly what the user
     /// asked for — `showsCaption`, and nothing else, decides.
     ///
-    /// The exception is `.iconAndText`, which still refuses: a glyph already names the
-    /// metric, so "CPU" beside a CPU icon says it twice.
+    /// The exceptions are the two styles that already name their metric with a glyph:
+    /// "CPU" beside a CPU icon says it twice, and "BATT" beside the system's own battery
+    /// indicator says it to the one audience on earth that did not need telling.
     private static func caption(for config: MenuBarItemConfig) -> String? {
-        switch config.style {
-        case .iconAndText:
-            return nil
-        case .text, .textAndGraph, .graph:
-            guard config.showsCaption else { return nil }
-        }
+        guard config.style.supportsCaption, config.showsCaption else { return nil }
         return captionText(for: config.metric)
     }
 
