@@ -62,6 +62,24 @@ public enum SnapshotFixtures {
     /// Nothing sampled yet — the first frame after launch.
     public static var pending: SystemSnapshot { SystemSnapshot() }
 
+    /// Every optional field the app charts or watches, filled in at once.
+    ///
+    /// `nominal` is shaped like a real Apple Silicon laptop, and on that hardware a
+    /// couple of fields are genuinely never populated — `systemWatts` most of all, which
+    /// `PowerCollector` deliberately leaves nil. That makes `nominal` the wrong fixture
+    /// for asking whether every series is wired up, because a series nobody remembered
+    /// to record and a series this Mac cannot measure look identical from the outside.
+    /// This one closes those gaps so coverage tests can tell the two apart. It is not a
+    /// plausible machine and should not be used for visual review.
+    public static var fullyPopulated: SystemSnapshot {
+        var snapshot = nominal
+        if var power = snapshot.power.value {
+            power.systemWatts = 18.4
+            snapshot.power = .value(power)
+        }
+        return snapshot
+    }
+
     public static let referenceDate = Date(timeIntervalSince1970: 1_767_225_600)
 
     // MARK: Builders
