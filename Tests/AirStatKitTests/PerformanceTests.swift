@@ -16,8 +16,28 @@ import Foundation
 /// live hardware would flake far worse and measure the sensor rather than the code.
 ///
 /// Budgets are calibrated against a **debug** build, which is what `swift test` runs.
-/// Release is several times faster. See `expectWithinBudget` for why they are set as
-/// loosely as they are.
+/// See `expectWithinBudget` for why they are set as loosely as they are.
+///
+/// ## Check release before concluding anything
+///
+///     swift test -c release --filter Performance
+///
+/// Release is not merely "the same shape, several times faster", and treating it that
+/// way will point you at the wrong code. At `-Onone` nothing inlines and nothing
+/// vectorises, so a hand-written element loop in this package beats a `min`/`max` or a
+/// `map` call into libswiftCore, which ships precompiled and optimised. Optimise
+/// against the debug numbers and you will write branchy hand-rolled loops that lose in
+/// the build users actually run.
+///
+/// This is not hypothetical. `ChartStats` was measured here at 17 µs debug while being
+/// *slower in release* than the three separate walks it exists to replace, 8.2 µs
+/// against 4.5 µs, because its compare-and-assign branches stopped the loop
+/// vectorising. Making it branchless cost 50% in debug and won 4.5x in release. The
+/// debug figure moved the wrong way and the release figure was the one that mattered.
+///
+/// So: these budgets guard against regressions, and debug is a fine place to catch a
+/// change that makes something ten times worse. Any judgement about which of two
+/// implementations is faster has to be made in release.
 @Suite("Performance", .tags(.performance), .serialized)
 struct PerformanceTests {
 
@@ -91,18 +111,20 @@ struct PerformanceTests {
 
         // The point of ChartStats existing. If a change ever makes the three-walk form
         // competitive, ChartStats has stopped earning its place.
+        //
+        // This assertion has now caught that twice, which is the whole reason it is an
+        // assertion rather than a comment. Once when the ring's own walks were made
+        // contiguous and ChartStats was left on the old subscript, and once in release
+        // when its branches turned out to be blocking vectorisation. Both times the
+        // one-pass premise had quietly stopped being true.
         #expect(single.fastestNanoseconds < triple.fastestNanoseconds,
                 "ChartStats should be faster than three separate O(n) walks")
 
-        // Budgeted well above what it costs today rather than at what it should cost.
-        //
-        // ChartStats is the one-pass walk and it is still hundreds of times the cost of
-        // copying the identical bytes, because every element reaches it through
-        // `SampleRing.subscript`, which pays a modulo and a bounds precondition per
-        // sample and does not inline in a debug build. That is a live finding, not a
-        // property worth locking in, so this budget is a tripwire against it getting
-        // *worse* while it stands. Tighten it if the subscript walk is ever replaced.
-        expectWithinBudget(single, nanoseconds: 700_000)
+        // Debug figure. ChartStats is deliberately written for release, where it is
+        // roughly 1.8 µs and 2.5x the three walks; at `-Onone` the branchless `min`/`max`
+        // it uses are un-inlined calls and it measures worse than the branchy version it
+        // replaced. See the suite comment. Judge this one in release, not here.
+        expectWithinBudget(single, nanoseconds: 100_000)
     }
 
     @Test("reading a full ring out as an array")
@@ -112,7 +134,7 @@ struct PerformanceTests {
             Benchmark.blackHole(ring.values)
         }
         // Two allocations and two memcpys of a wrapped ring.
-        expectWithinBudget(result, nanoseconds: 40_000)
+        expectWithinBudget(result, nanoseconds: 5_000)
     }
 
     // MARK: History
@@ -138,7 +160,7 @@ struct PerformanceTests {
             history.clear()
             Benchmark.blackHole(history.capacity)
         }
-        expectWithinBudget(result, nanoseconds: 400_000)
+        expectWithinBudget(result, nanoseconds: 40_000)
     }
 
     @Test("resizing history when the retention setting changes")
@@ -172,7 +194,7 @@ struct PerformanceTests {
         // This runs on the main actor on every snapshot and on every settings revision.
         // At the default 2 s cadence a millisecond here is 0.05% of a core; the budget
         // is set at the point where the menu bar would start costing real battery.
-        expectWithinBudget(result, nanoseconds: 12_000_000)
+        expectWithinBudget(result, nanoseconds: 5_000_000)
     }
 
     @Test("building the menu bar model with the shipped two readouts")
@@ -189,7 +211,7 @@ struct PerformanceTests {
                                                    isStale: false))
         }
         // What almost every user actually pays.
-        expectWithinBudget(result, nanoseconds: 1_500_000)
+        expectWithinBudget(result, nanoseconds: 800_000)
     }
 
     @Test("deciding whether the status item needs redrawing")
@@ -230,7 +252,7 @@ struct PerformanceTests {
             Benchmark.blackHole(ChartScale.resolve(series, adaptive: true))
         }
         // Every open panel rebuilds these as snapshots land.
-        expectWithinBudget(result, nanoseconds: 12_000_000)
+        expectWithinBudget(result, nanoseconds: 2_000_000)
     }
 
     // MARK: Notifications
@@ -248,7 +270,7 @@ struct PerformanceTests {
             now += 1
             Benchmark.blackHole(evaluator.alerts(for: rules, readings: readings, now: now))
         }
-        expectWithinBudget(result, nanoseconds: 100_000)
+        expectWithinBudget(result, nanoseconds: 30_000)
     }
 
     @Test("reading every watchable metric out of a snapshot")
@@ -257,7 +279,7 @@ struct PerformanceTests {
         let result = Benchmark.measure("ThresholdEvaluator.readings", iterations: 500) {
             Benchmark.blackHole(ThresholdEvaluator.readings(from: snapshot))
         }
-        expectWithinBudget(result, nanoseconds: 60_000)
+        expectWithinBudget(result, nanoseconds: 20_000)
     }
 
     // MARK: Settings persistence
@@ -274,7 +296,7 @@ struct PerformanceTests {
         // Off the main actor and debounced, so this is not a hot path. It is here
         // because the save also *decodes* the existing file to validate it before
         // promoting it to backup, which doubles the cost of every write.
-        expectWithinBudget(result, nanoseconds: 3_000_000)
+        expectWithinBudget(result, nanoseconds: 400_000)
     }
 
     @Test("decoding settings at launch")
@@ -287,7 +309,7 @@ struct PerformanceTests {
             Benchmark.blackHole(try? decoder.decode(Settings.self, from: data))
         }
         // On the launch path, before the first frame.
-        expectWithinBudget(result, nanoseconds: 4_000_000)
+        expectWithinBudget(result, nanoseconds: 600_000)
     }
 
     @Test("sanitising a decoded settings tree")
@@ -298,7 +320,7 @@ struct PerformanceTests {
         }
         // Runs on every single mutation, so every keystroke in a text field and every
         // frame of a slider drag pays it.
-        expectWithinBudget(result, nanoseconds: 200_000)
+        expectWithinBudget(result, nanoseconds: 60_000)
     }
 
     // MARK: Formatting
@@ -314,7 +336,7 @@ struct PerformanceTests {
             Benchmark.blackHole(formatter.watts(21.4))
             Benchmark.blackHole(formatter.duration(7_245))
         }
-        expectWithinBudget(result, nanoseconds: 60_000)
+        expectWithinBudget(result, nanoseconds: 30_000)
     }
 }
 
@@ -347,7 +369,7 @@ struct MainActorPerformanceTests {
             // observable, and record up to 21 series. Everything the UI redraws hangs
             // off this, so it is the number that decides whether a 1 s interval is
             // reasonable to offer at all.
-            expectWithinBudget(result, nanoseconds: 200_000)
+            expectWithinBudget(result, nanoseconds: 60_000)
         }
     }
 
@@ -368,7 +390,7 @@ struct MainActorPerformanceTests {
         }
         // Paid once per status item per redraw when the combine switch is off, so the
         // separate-items layout multiplies this by the number of enabled readouts.
-        expectWithinBudget(result, nanoseconds: 1_000_000)
+        expectWithinBudget(result, nanoseconds: 200_000)
     }
 
     @Test("a settings mutation, which every slider drag repeats")
@@ -382,7 +404,7 @@ struct MainActorPerformanceTests {
             }
             // Copies the tree, mutates, sanitises, compares for equality and schedules
             // a save. A slider drag runs this at display rate.
-            expectWithinBudget(result, nanoseconds: 400_000)
+            expectWithinBudget(result, nanoseconds: 40_000)
         }
     }
 }

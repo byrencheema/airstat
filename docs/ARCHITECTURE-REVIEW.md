@@ -85,16 +85,36 @@ for key in series.keys {
 }
 ```
 
-`series.keys` holds a reference to the dictionary's storage for the life of the loop, so
-`series` is never uniquely referenced inside it and every assignment triggers a
-copy-on-write of the whole dictionary. Twenty-one series, twenty-one full copies.
+The claim was that `series.keys` holds a reference to the dictionary's storage for the
+life of the loop, so `series` is never uniquely referenced inside it and every
+assignment triggers a copy-on-write of the whole dictionary: twenty-one series,
+twenty-one full copies.
+
+> **CORRECTED 2026-08-06. The premise does not reproduce, and the fix was not a speed
+> win.** Both forms were A/B'd in-tree and then isolated in a standalone benchmark:
+> `clear` measures 9.8 µs through the keys view against 11.4 µs through
+> `SeriesKey.allCases`, and `resize` 2.70 ms against 2.74 ms. Pre-uniquing the
+> dictionary before the loop moves neither. The predicted per-assignment copy is simply
+> not happening on this Swift version. Independently confirmed at integration: `clear`
+> went 10.8 µs to 10.9 µs across the change, which is flat.
+>
+> Where `clear`'s time actually goes is the 21 keyed lookups. `SeriesKey`'s `String`
+> raw value makes each hash about 230 ns, against roughly 105 ns for a raw-value-less
+> enum. That is the finding this paragraph should have contained, and it is worth an
+> order of magnitude less than the one it claimed.
+>
+> The `SeriesKey.allCases` form was kept anyway, for the reasons that survive: it
+> agrees with `init` by construction, and it does not mutate a collection while
+> iterating a view of it. The `resize` improvement below came entirely from A1's
+> contiguous walk inside `resized`, not from this loop.
+>
+> This is recorded rather than deleted because the reasoning is a plausible trap. The
+> keys-view aliasing problem is real in Swift in general; it just is not what these two
+> functions were paying for, and reading the code was not enough to tell the difference.
+> Measure before optimising, including when the mechanism sounds certain.
 
 `resize` measures **3.36 ms**, and it runs on the main actor while the user drags the
 retention slider. `clear` has the same shape and runs on every wake from sleep.
-
-`for key in Array(series.keys)`, or iterating `SeriesKey.allCases`, drops the extra
-copies. `SeriesKey.allCases` is the better of the two: it is what `init` already uses to
-populate the dictionary, so the two would agree by construction.
 
 ## A4. The menu bar normalises an hour of history to draw about forty pixels
 
@@ -202,6 +222,59 @@ Things that look like findings and are not, so nobody re-raises them:
   sampling path. An array of existentials would read better and undo that.
 
 ---
+
+## Outcome, 2026-08-06
+
+All of A1 to A6 were implemented on `perf/architecture-findings` by four agents working
+in parallel worktrees. Every number below was re-measured by the integrator on the
+merged tree, not copied from an agent's report.
+
+**Debug (`swift test --filter Performance`), before → after:**
+
+| | before | after | |
+|---|---|---|---|
+| `ChartSeries` x21 + scale resolve | 5.74 ms | **570 µs** | 10x |
+| Menu bar model, 16 readouts | 4.50 ms | **1.96 ms** | 2.3x |
+| `ChartStats` (one pass) | 276 µs | **25.8 µs** | 11x |
+| `MetricHistory.resize` 1802→900 | 3.36 ms | **2.72 ms** | 1.2x |
+| `ChartStats` vs memcpy of the same bytes | 474x | **51x** | |
+
+**Release (`swift test -c release`), where the judgement calls were made:**
+`ChartStats` 1.8 µs, `ChartSeries` x21 43 µs, menu bar model at 16 readouts 63 µs.
+
+Tests went 109 to 136. The suite is green in both build modes.
+
+### What changed about the findings themselves
+
+- **A3 was wrong**, and is corrected in place above. The mechanism I predicted from
+  reading the code was not what those two functions were paying for.
+- **A4 was half wrong.** The review counted the second allocation as the problem. The
+  agent measured it: `ring.values` is 583 ns against a 404 µs path, so the allocations
+  were 0.14 % and the walks were everything. It removed the redundant `ring.maximum`
+  walk and declined the fusion I asked for, having measured the fused version *slower*.
+  Correct call. Once A1 landed, the remaining gain was inside noise, and the value of
+  that work is now mostly its eight normalisation tests.
+- **A4's decimation was correctly refused.** `Design.MenuBar.graphWidth` exists but is
+  not the drawn width: the drawing layer computes columns from pixel-snapped positions
+  and already decimates with max-per-bucket at device resolution. Pre-decimating in the
+  model could not be pixel-exact without teaching it the backing scale, which is the
+  coupling the model exists to avoid.
+- **A1 grew a file.** `ChartStats` lives in `ChartData.swift`, which the original
+  scoping did not assign to anyone, while being the caller A1 was entirely about.
+
+### The finding the work itself produced
+
+`ChartStats` was **slower in release than the three walks it exists to replace** (8.2 µs
+against 4.5 µs) even after A1, because its compare-and-assign branches stopped the loop
+vectorising. Branchless `min`/`max` fixed it: 4.5x faster in release, and 50 % *slower*
+in debug.
+
+That inversion is the lasting lesson here, and it is recorded at the top of
+`PerformanceTests.swift`. At `-Onone` nothing inlines or vectorises, so hand-rolled
+element loops beat calls into the precompiled, optimised standard library, and a debug
+benchmark will confidently recommend the code that loses in the build users run. Debug
+is fine for catching a ten-fold regression. Any "is A faster than B" question has to be
+answered in release.
 
 ## Suggested order
 

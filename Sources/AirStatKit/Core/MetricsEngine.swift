@@ -209,6 +209,15 @@ public final class MetricsEngine {
         self.powerStateObserver = nil
     }
 
+    /// Re-pushes the whole configuration, and is called for *any* accepted settings
+    /// change: the engine wakes on `settingsStore.revision`, which bumps on every
+    /// mutation. Changing an overlay colour re-pushes the interval, the enabled-source
+    /// set and the public IP flag.
+    ///
+    /// That is harmless only because every setter it calls early-returns on an
+    /// unchanged value, so the redundant pushes cost a few queue hops. Anything added
+    /// here that is *not* idempotent becomes a bug the moment a user drags a colour
+    /// picker, because a drag runs this at display rate.
     func applySettings() {
         let s = settingsStore.settings
         core?.setBaseInterval(s.general.updateInterval)
