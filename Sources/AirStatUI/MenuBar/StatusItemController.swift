@@ -1,6 +1,5 @@
 import AppKit
 import AirStatKit
-import Observation
 
 /// What the menu bar is currently made of.
 ///
@@ -231,24 +230,15 @@ public final class StatusItemController {
     /// rather than timer-driven: no snapshot, no redraw, no wakeup.
     private func beginRendering() {
         renderTask?.cancel()
+        let changes = ObservedChanges { [engine, settings] in
+            _ = engine.snapshot
+            _ = settings.revision
+        }
         renderTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
+            for await _ in changes {
                 guard let self else { return }
-                await StatusItemController.awaitChange {
-                    _ = self.engine.snapshot
-                    _ = self.settings.revision
-                }
-                guard !Task.isCancelled else { return }
-                await Task.yield()
                 self.render()
             }
-        }
-    }
-
-    @MainActor
-    private static func awaitChange(_ track: @escaping () -> Void) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            withObservationTracking { track() } onChange: { continuation.resume() }
         }
     }
 

@@ -361,23 +361,12 @@ public final class OverlayController: NSObject, NSWindowDelegate {
     /// nothing until something else happened to call `syncWithSettings`.
     private func beginObservingSettings() {
         settingsTask?.cancel()
+        let changes = settings.changes
         settingsTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
+            for await _ in changes {
                 guard let self else { return }
-                await OverlayController.awaitChange { _ = self.settings.revision }
-                guard !Task.isCancelled else { return }
-                // `onChange` fires before the new value is stored; yield so the write
-                // has landed before it is read back.
-                await Task.yield()
                 self.syncWithSettings()
             }
-        }
-    }
-
-    @MainActor
-    private static func awaitChange(_ track: @escaping () -> Void) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            withObservationTracking { track() } onChange: { continuation.resume() }
         }
     }
 
