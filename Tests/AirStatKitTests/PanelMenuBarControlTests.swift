@@ -17,6 +17,25 @@ struct PanelMenuBarControlTests {
         return SettingsStore(directory: dir, saveDebounce: .milliseconds(1))
     }
 
+    /// A store whose readout list is stated outright.
+    ///
+    /// Every test about a metric that is *not* in the menu bar has to name the list it
+    /// starts from rather than leaning on `defaultItems`. These tests originally used
+    /// the defaults and assumed GPU was absent from them, which was true when they were
+    /// written and false one commit later when the shipped defaults became CPU, CPU
+    /// Temp, GPU and Battery. Nothing about the behaviour under test had changed.
+    private func store(items: [MenuBarItemConfig]) -> SettingsStore {
+        let settings = store()
+        settings.update { $0.menuBar.items = items }
+        return settings
+    }
+
+    /// The readouts these tests treat as "everything except the metric in question".
+    /// CPU alone, so it is never the metric being probed and never the last enabled one.
+    private var withoutGPU: [MenuBarItemConfig] {
+        [MenuBarItemConfig(metric: .cpuUsage), MenuBarItemConfig(metric: .memoryUsage)]
+    }
+
     private func control(_ module: PanelModule, _ settings: SettingsStore) -> PanelMenuBarControl {
         guard let control = PanelMenuBarControl(module: module, settings: settings) else {
             Issue.record("\(module.label) has no menu bar metric")
@@ -74,7 +93,7 @@ struct PanelMenuBarControlTests {
 
     @Test("showing a metric with no readout creates one, enabled, at its first style")
     func showCreatesAConfig() {
-        let settings = store()
+        let settings = store(items: withoutGPU)
         let gpu = control(.gpu, settings)
         #expect(gpu.configs.isEmpty)
         #expect(gpu.isShown == false)
@@ -91,7 +110,7 @@ struct PanelMenuBarControlTests {
 
     @Test("picking a style for a metric that is not shown puts it in the menu bar")
     func styleOnAHiddenMetricShowsIt() {
-        let settings = store()
+        let settings = store(items: withoutGPU)
         let gpu = control(.gpu, settings)
         gpu.setStyle(.textAndGraph)
 
@@ -236,7 +255,10 @@ struct PanelMenuBarControlTests {
         #expect(style.wrappedValue == .iconAndText)
 
         settings.resetSection(.menuBar)
-        #expect(settings.settings.menuBar.items.count == 2)
+        // Counted off the shipped defaults rather than written out: what this test is
+        // about is the binding surviving the list being replaced, not how long the
+        // replacement happens to be.
+        #expect(settings.settings.menuBar.items.count == MenuBarSettings.defaultItems.count)
 
         // The readout the binding spoke for is gone; reading it answers "absent"
         // instead of subscripting past the end of the list.
@@ -270,7 +292,7 @@ struct PanelMenuBarControlTests {
 
     @Test("the accessibility value says both halves of the state")
     func accessibilityValueDescribesTheState() {
-        let settings = store()
+        let settings = store(items: withoutGPU)
         let gpu = control(.gpu, settings)
         #expect(gpu.accessibilityValue == "Not in the menu bar")
 
