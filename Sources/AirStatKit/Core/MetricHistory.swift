@@ -29,45 +29,90 @@ public struct SampleRing: Sendable, Equatable {
     /// Oldest-to-newest ordered samples. Allocates; call once per render, not per point.
     public var values: [Float] {
         guard count > 0 else { return [] }
-        if count < capacity {
-            return Array(storage[0..<count])
+        return withUnsafeRuns { older, newer in
+            // One allocation and two memcpys. Appending the runs into a reserved array
+            // instead costs about twice this, because each append re-checks capacity.
+            Array(unsafeUninitializedCapacity: older.count + newer.count) { out, initialized in
+                guard let destination = out.baseAddress else { return }
+                if let source = older.baseAddress {
+                    destination.initialize(from: source, count: older.count)
+                }
+                if let source = newer.baseAddress {
+                    (destination + older.count).initialize(from: source, count: newer.count)
+                }
+                initialized = older.count + newer.count
+            }
         }
-        return Array(storage[head..<capacity]) + Array(storage[0..<head])
     }
 
-    /// Oldest-to-newest without allocating an intermediate array.
-    public func withValues<R>(_ body: (UnsafeBufferPointer<Float>) -> R) -> R? {
-        guard count > 0, count < capacity else { return nil }
-        return storage.withUnsafeBufferPointer { body(UnsafeBufferPointer(rebasing: $0[0..<count])) }
+    /// The samples oldest-to-newest, as the one or two contiguous runs they occupy.
+    ///
+    /// This replaces a `withValues` that handed out a single buffer and guarded on
+    /// `count < capacity`, which is false exactly when the ring is full: the steady
+    /// state after the first hour of uptime, and the only state where avoiding the
+    /// allocation is worth anything. The guard was not a bug, it was the honest
+    /// consequence of promising one contiguous buffer for samples that wrap. Two runs
+    /// is the shape a full ring can actually be walked in, so it is the shape the API
+    /// takes: `older` runs from `head` to the end of storage, `newer` from the start
+    /// of storage up to `head`, and concatenating them gives oldest-to-newest. Either
+    /// may be empty; both are when the ring is.
+    ///
+    /// Walking these instead of `subscript` is what makes aggregates cheap: no bounds
+    /// precondition, no wrap branch and no integer modulo per element.
+    public func withUnsafeRuns<R>(
+        _ body: (UnsafeBufferPointer<Float>, UnsafeBufferPointer<Float>) -> R
+    ) -> R {
+        storage.withUnsafeBufferPointer { buffer in
+            let empty = UnsafeBufferPointer(rebasing: buffer[0..<0])
+            guard count > 0 else { return body(empty, empty) }
+            guard count == capacity else {
+                // Never wrapped: the samples sit in order at the front of storage.
+                return body(UnsafeBufferPointer(rebasing: buffer[0..<count]), empty)
+            }
+            return body(UnsafeBufferPointer(rebasing: buffer[head..<capacity]),
+                        UnsafeBufferPointer(rebasing: buffer[0..<head]))
+        }
     }
 
     public subscript(index: Int) -> Float {
         precondition(index >= 0 && index < count, "SampleRing index out of range")
-        let start = count < capacity ? 0 : head
-        return storage[(start + index) % capacity]
+        // A compare and a subtract rather than a modulo: `start + index` is under
+        // `2 * capacity`, so at most one wrap can ever be needed.
+        var slot = (count < capacity ? 0 : head) + index
+        if slot >= capacity { slot -= capacity }
+        return storage[slot]
     }
 
     public var last: Float? { count > 0 ? self[count - 1] : nil }
 
     public var maximum: Float {
         guard count > 0 else { return 0 }
-        var m: Float = -.greatestFiniteMagnitude
-        for i in 0..<count { m = Swift.max(m, self[i]) }
-        return m
+        return withUnsafeRuns { older, newer in
+            var m: Float = -.greatestFiniteMagnitude
+            for v in older { m = Swift.max(m, v) }
+            for v in newer { m = Swift.max(m, v) }
+            return m
+        }
     }
 
     public var minimum: Float {
         guard count > 0 else { return 0 }
-        var m: Float = .greatestFiniteMagnitude
-        for i in 0..<count { m = Swift.min(m, self[i]) }
-        return m
+        return withUnsafeRuns { older, newer in
+            var m: Float = .greatestFiniteMagnitude
+            for v in older { m = Swift.min(m, v) }
+            for v in newer { m = Swift.min(m, v) }
+            return m
+        }
     }
 
     public var average: Float {
         guard count > 0 else { return 0 }
-        var sum: Float = 0
-        for i in 0..<count { sum += self[i] }
-        return sum / Float(count)
+        return withUnsafeRuns { older, newer in
+            var sum: Float = 0
+            for v in older { sum += v }
+            for v in newer { sum += v }
+            return sum / Float(count)
+        }
     }
 
     public mutating func removeAll() {
@@ -78,8 +123,18 @@ public struct SampleRing: Sendable, Equatable {
     /// Resize preserving the most recent samples.
     public mutating func resized(to newCapacity: Int) -> SampleRing {
         var ring = SampleRing(capacity: newCapacity)
-        let keep = Swift.min(count, newCapacity)
-        for i in (count - keep)..<count { ring.append(self[i]) }
+        let keep = Swift.min(count, ring.capacity)
+        guard keep > 0 else { return ring }
+        // The oldest `count - keep` samples are dropped, which may fall entirely in
+        // the first run, or consume it and reach into the second.
+        var drop = count - keep
+        withUnsafeRuns { older, newer in
+            let olderStart = Swift.min(drop, older.count)
+            drop -= olderStart
+            for i in olderStart..<older.count { ring.append(older[i]) }
+            let newerStart = Swift.min(drop, newer.count)
+            for i in newerStart..<newer.count { ring.append(newer[i]) }
+        }
         return ring
     }
 }
@@ -169,14 +224,26 @@ public struct MetricHistory: Sendable, Equatable {
     public mutating func resize(to newCapacity: Int) {
         let cap = max(2, newCapacity)
         guard cap != capacity else { return }
-        for key in series.keys {
-            series[key] = series[key]?.resized(to: cap)
+        // `SeriesKey.allCases` rather than `series.keys`: it is what `init` populates
+        // the dictionary from, so the two agree by construction, and nothing here
+        // mutates a collection it is in the middle of iterating.
+        //
+        // Not a speed change, and it was expected to be one. The theory was that the
+        // keys view keeps the dictionary's storage referenced for the life of the
+        // loop, so every assignment inside it copies all 21 entries. Measured, the two
+        // forms are within noise of each other, and pre-uniquing the dictionary before
+        // the loop does not move either, so those copies are not happening. What the
+        // 21 iterations actually cost is 21 keyed lookups, and `SeriesKey`'s `String`
+        // raw value makes each hash about 230 ns. Anyone chasing this further should
+        // start there, not here.
+        for key in SeriesKey.allCases {
+            if var ring = series[key] { series[key] = ring.resized(to: cap) }
         }
         capacity = cap
     }
 
     public mutating func clear() {
-        for key in series.keys { series[key]?.removeAll() }
+        for key in SeriesKey.allCases { series[key]?.removeAll() }
         lastSampleDate = nil
     }
 
