@@ -172,6 +172,12 @@ extension PanelModuleView {
         section(engine.network) { network in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 PanelDetailGrid(entries: networkEntries(network))
+                if let publicIP = publicIPValue(network.publicIP) {
+                    // Full width rather than a grid cell, the way the battery's adapter
+                    // row is: a grid cell is half of 340pt and truncated "203.0.113…"
+                    // after the label, and an IPv6 answer is three times longer again.
+                    ReadoutRow("Public IP", publicIP)
+                }
                 if let wifi = network.wifi, let quality = wifi.signalQuality {
                     // The network's name labels its own signal bar; a row that said
                     // "Signal" and a row that said "Network" would be two lines
@@ -193,6 +199,22 @@ extension PanelModuleView {
             entries.append(PanelDetailEntry("Interface", name))
         }
         return entries
+    }
+
+    /// What the public IP row says, or nil when there should be no row at all.
+    ///
+    /// The fetcher reports `.unsupported` while the toggle is off, and that is the one
+    /// state with no row: a permanently empty field would read as a lookup that keeps
+    /// failing rather than a feature nobody asked for. The fetcher's failure text is a
+    /// sentence and this line holds a value, so the row says only which of the three
+    /// things is true: an address, a lookup in flight, or one that did not answer.
+    private func publicIPValue(_ state: MetricState<String>) -> String? {
+        switch state {
+        case .value(let address): return address
+        case .failure(.unsupported): return nil
+        case .failure(.pending): return "Looking up…"
+        case .failure: return MetricFormatter.unavailable
+        }
     }
 
     /// Signal strength with the negotiated rate beside it: the two together are what

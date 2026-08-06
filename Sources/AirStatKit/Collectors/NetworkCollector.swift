@@ -105,7 +105,18 @@ public final class NetworkCollector: MetricSource {
     private var lastWiFiRead: ContinuousClock.Instant?
     private var wifiInterfaceName: String?
 
+    /// Owns the one outbound request this app makes. Idle until the user turns
+    /// `general.fetchesPublicIP` on; see `PublicIPFetcher` for the endpoint and the
+    /// throttle, both of which are its business rather than this collector's.
+    private let publicIPLookup = PublicIPFetcher()
+
     public init() {}
+
+    /// Pushed in from `SamplingCore` when the setting changes, because a collector has
+    /// no way to read the settings store and no business acquiring one.
+    func setPublicIPLookupEnabled(_ enabled: Bool) {
+        publicIPLookup.setEnabled(enabled)
+    }
 
     public func start() {
         autoreleasepool { acquire() }
@@ -263,6 +274,11 @@ public final class NetworkCollector: MetricSource {
         // interval and the link quality is re-read on the first sample after a wake.
         refreshWiFi(force: false, linkIsUp: wifiLinkIsUp)
 
+        // Returns immediately whether or not it starts anything: the round trip belongs
+        // to URLSession's queues, so nothing behind us on the sampling queue waits for
+        // a server on the far side of the internet.
+        publicIPLookup.refreshIfDue()
+
         let primaryName = primaryInterfaceName()
         let primary = primaryName.flatMap { name in stats.first { $0.name == name } }
         sort(&stats, primaryName: primaryName)
@@ -279,11 +295,11 @@ public final class NetworkCollector: MetricSource {
             connectionType: primary?.type ?? .none,
             wifi: wifi,
             localIPv4: primary?.ipv4,
-            // Deliberately not fetched here: `collect()` runs on the shared sampling
-            // queue, so an HTTP round trip would block every other collector behind it,
-            // and silently contacting a third party is not something a sampling tick
-            // should do. A separate opt-in, heavily throttled fetcher owns this field.
-            publicIP: .pending,
+            // Never fetched inline: `collect()` runs on the shared sampling queue, so an
+            // HTTP round trip would block every other collector behind it, and silently
+            // contacting a third party is not something a sampling tick should do. This
+            // is the cached answer of the opt-in fetcher above, read under its lock.
+            publicIP: publicIPLookup.currentState(),
             isVPNActive: vpnActive))
     }
 

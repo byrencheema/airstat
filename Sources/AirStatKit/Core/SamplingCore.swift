@@ -194,6 +194,15 @@ public final class SamplingCore: @unchecked Sendable {
         }
     }
 
+    /// Turns the public IP lookup on or off. The one collector behaviour the user has
+    /// to opt into, so it is pushed down here rather than read from settings by the
+    /// collector: this queue is the only place a collector's state may be touched.
+    public func setPublicIPLookupEnabled(_ enabled: Bool) {
+        queue.async { [self] in
+            networkSlot.source.setPublicIPLookupEnabled(enabled)
+        }
+    }
+
     /// Called on wake from sleep: cumulative counters may have reset and every
     /// rate is meaningless until re-baselined.
     public func noteWakeFromSleep() {
