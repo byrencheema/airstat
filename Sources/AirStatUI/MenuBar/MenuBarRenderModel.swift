@@ -64,6 +64,14 @@ public struct MenuBarItemRender: Equatable, Sendable {
     /// Charge at or below `MenuBarItemRender.lowBatteryFraction` and not charging.
     /// Carried rather than recomputed in the view so the threshold lives in one place.
     public var isBatteryLow: Bool
+    /// The digits drawn inside the shell: whole percent, and no percent sign.
+    ///
+    /// The sign is dropped because there is nothing else a number inside a battery could
+    /// be a proportion of, and at nine points inside a 24-point shell it is a character
+    /// that costs a third of the width to say something the shape already says. Carried
+    /// as text rather than derived from `batteryCharge` in the view for the usual
+    /// reason: the view does no interpretation, and rounding is interpretation.
+    public var batteryValueText: String?
 
     /// Where the indicator turns red. 20% is where macOS itself first warns.
     public static let lowBatteryFraction = 0.20
@@ -75,7 +83,8 @@ public struct MenuBarItemRender: Equatable, Sendable {
                 accessibilityLabel: String,
                 batteryCharge: Double? = nil,
                 isBatteryCharging: Bool = false,
-                isBatteryLow: Bool = false) {
+                isBatteryLow: Bool = false,
+                batteryValueText: String? = nil) {
         self.id = id
         self.style = style
         self.tint = tint
@@ -88,6 +97,7 @@ public struct MenuBarItemRender: Equatable, Sendable {
         self.batteryCharge = batteryCharge
         self.isBatteryCharging = isBatteryCharging
         self.isBatteryLow = isBatteryLow
+        self.batteryValueText = batteryValueText
     }
 
 }
@@ -273,7 +283,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 unavailable = false
                 let charge = min(max(pct / 100, 0), 1)
                 let isLow = !power.isCharging && charge <= MenuBarItemRender.lowBatteryFraction
-                battery = BatteryState(charge: charge, isCharging: power.isCharging, isLow: isLow)
+                // Rounded off the clamped charge rather than off the raw percentage, so
+                // the digits and the fill can never disagree about how full it is.
+                battery = BatteryState(charge: charge, isCharging: power.isCharging,
+                                       isLow: isLow,
+                                       valueText: String(Int((charge * 100).rounded())))
                 // The indicator style takes the digits off the screen, so this is the
                 // only place the exact charge is still stated. It says everything the
                 // shape says: the number, that power is going in, that it is low.
@@ -335,6 +349,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         var charge: Double
         var isCharging: Bool
         var isLow: Bool
+        var valueText: String
     }
 
     private static func finish(config: MenuBarItemConfig,
@@ -361,7 +376,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             accessibilityLabel: accessibility,
             batteryCharge: battery?.charge,
             isBatteryCharging: battery?.isCharging ?? false,
-            isBatteryLow: battery?.isLow ?? false
+            isBatteryLow: battery?.isLow ?? false,
+            batteryValueText: battery?.valueText
         )
     }
 
