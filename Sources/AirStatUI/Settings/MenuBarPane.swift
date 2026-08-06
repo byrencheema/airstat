@@ -20,6 +20,11 @@ struct MenuBarPane: View {
         return items.firstIndex { $0.id == selection }
     }
 
+    private var selectedItem: MenuBarItemConfig? {
+        guard let selection else { return nil }
+        return items.first { $0.id == selection }
+    }
+
     var body: some View {
         Form {
             Section {
@@ -36,8 +41,8 @@ struct MenuBarPane: View {
                 Text("Readouts")
             }
 
-            if let index = selectedIndex {
-                itemDetail(index: index)
+            if let item = selectedItem {
+                itemDetail(item)
             }
 
             Section {
@@ -169,16 +174,15 @@ struct MenuBarPane: View {
     /// "CPU Usage", it read as a section of the pane, and changing the picker while
     /// looking at a list of four readouts was a guess about which one was moving.
     @ViewBuilder
-    private func itemDetail(index: Int) -> some View {
-        let item = items[index]
+    private func itemDetail(_ item: MenuBarItemConfig) -> some View {
         Section {
-            Picker("Metric", selection: metricBinding(index: index)) {
+            Picker("Metric", selection: metricBinding(for: item)) {
                 ForEach(MenuBarMetric.allCases, id: \.self) { metric in
                     Text(metric.label).tag(metric)
                 }
             }
 
-            Picker("Display as", selection: styleBinding(index: index)) {
+            Picker("Display as", selection: styleBinding(for: item)) {
                 ForEach(item.metric.supportedStyles, id: \.self) { style in
                     Text(style.label).tag(style)
                 }
@@ -189,7 +193,7 @@ struct MenuBarPane: View {
             // a caption to add and the toggle would do nothing if shown.
             if item.style != .iconAndText {
                 Toggle("Show \"\(caption(for: item.metric))\" above the value",
-                       isOn: captionBinding(index: index))
+                       isOn: captionBinding(for: item))
             }
         } header: {
             Label("Editing \(item.metric.label)", systemImage: "slider.horizontal.3")
@@ -209,52 +213,52 @@ struct MenuBarPane: View {
 
     // MARK: Model access
 
-    /// Bindings are index-based rather than id-based so a rename or reorder cannot
-    /// silently write to the wrong item.
-    private func enabledBinding(for item: MenuBarItemConfig) -> Binding<Bool> {
-        Binding(get: { item.isEnabled },
-                set: { isOn in
-                    settings.update { s in
-                        guard let index = s.menuBar.items.firstIndex(where: { $0.id == item.id }) else { return }
-                        s.menuBar.items[index].isEnabled = isOn
-                    }
-                })
+    /// Bindings carry the item's id rather than its position, so a rename or reorder
+    /// cannot silently write to whichever readout now sits at that index.
+    ///
+    /// The getters answer from the captured item instead of going back to the array.
+    /// SwiftUI reads a `Picker`'s selection during the same update pass that replaces
+    /// the list, before the pane's body has had a chance to drop the editing section,
+    /// so a getter that subscripted by index would trap on anything that shortens
+    /// `menuBar.items` under the editor: Restore Defaults, or an import. The metric,
+    /// style and caption factories are internal rather than private so the regression
+    /// test can hold a binding across exactly that reset.
+    private func mutate(_ item: MenuBarItemConfig,
+                        _ body: @escaping (inout MenuBarItemConfig) -> Void) {
+        settings.update { s in
+            guard let index = s.menuBar.items.firstIndex(where: { $0.id == item.id }) else { return }
+            body(&s.menuBar.items[index])
+        }
     }
 
-    private func metricBinding(index: Int) -> Binding<MenuBarMetric> {
-        Binding(get: { items[index].metric },
+    private func enabledBinding(for item: MenuBarItemConfig) -> Binding<Bool> {
+        Binding(get: { item.isEnabled },
+                set: { isOn in mutate(item) { $0.isEnabled = isOn } })
+    }
+
+    func metricBinding(for item: MenuBarItemConfig) -> Binding<MenuBarMetric> {
+        Binding(get: { item.metric },
                 set: { metric in
-                    settings.update { s in
-                        guard s.menuBar.items.indices.contains(index) else { return }
-                        s.menuBar.items[index].metric = metric
+                    mutate(item) { config in
+                        config.metric = metric
                         // `sanitized()` in the store will clamp an unsupported style,
                         // but doing it here keeps the picker from flashing a value it
                         // is about to lose.
-                        if !metric.supportedStyles.contains(s.menuBar.items[index].style) {
-                            s.menuBar.items[index].style = metric.supportedStyles.first ?? .text
+                        if !metric.supportedStyles.contains(config.style) {
+                            config.style = metric.supportedStyles.first ?? .text
                         }
                     }
                 })
     }
 
-    private func styleBinding(index: Int) -> Binding<MenuBarDisplayStyle> {
-        Binding(get: { items[index].style },
-                set: { style in
-                    settings.update { s in
-                        guard s.menuBar.items.indices.contains(index) else { return }
-                        s.menuBar.items[index].style = style
-                    }
-                })
+    func styleBinding(for item: MenuBarItemConfig) -> Binding<MenuBarDisplayStyle> {
+        Binding(get: { item.style },
+                set: { style in mutate(item) { $0.style = style } })
     }
 
-    private func captionBinding(index: Int) -> Binding<Bool> {
-        Binding(get: { items[index].showsCaption },
-                set: { shows in
-                    settings.update { s in
-                        guard s.menuBar.items.indices.contains(index) else { return }
-                        s.menuBar.items[index].showsCaption = shows
-                    }
-                })
+    func captionBinding(for item: MenuBarItemConfig) -> Binding<Bool> {
+        Binding(get: { item.showsCaption },
+                set: { shows in mutate(item) { $0.showsCaption = shows } })
     }
 
     /// The item the store would refuse to disable, or nil when more than one is on.
