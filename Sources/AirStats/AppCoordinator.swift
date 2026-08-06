@@ -16,8 +16,13 @@ final class AppCoordinator {
     private let overlay: OverlayController
     private let settingsWindow: SettingsWindowController
     private let thresholdMonitor: ThresholdMonitor
+    private let hotKeys: GlobalHotKeyCenter
 
     private var observers: [any NSObjectProtocol] = []
+    /// Where the panel is currently hung. Kept here because with one status item per
+    /// readout, "toggle" has a third case: the click came from a different item than
+    /// the one the panel is under.
+    private var panelAnchor: NSRect?
 
     init() {
         let store = SettingsStore()
@@ -29,6 +34,7 @@ final class AppCoordinator {
         self.overlay = OverlayController(engine: engine, settings: store)
         self.settingsWindow = SettingsWindowController(engine: engine, settings: store)
         self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store)
+        self.hotKeys = GlobalHotKeyCenter(settings: store)
     }
 
     // MARK: Lifecycle
@@ -50,9 +56,22 @@ final class AppCoordinator {
             self?.engine.setOverlayVisible(visible)
         }
 
+        // A hot key must do exactly what the equivalent menu item does, including
+        // leaving the frontmost app alone: the panel is worth having precisely because
+        // it can be summoned over another app without interrupting it.
+        hotKeys.onAction = { [weak self] action in
+            guard let self else { return }
+            switch action {
+            case .togglePanel: self.togglePanel()
+            case .toggleOverlay: self.toggleOverlay()
+            case .openSettings: self.showSettings()
+            }
+        }
+
         statusItem.install()
         engine.start()
         thresholdMonitor.start()
+        hotKeys.start()
         overlay.syncWithSettings()
 
         registerSystemObservers()
@@ -66,6 +85,7 @@ final class AppCoordinator {
             NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
+        hotKeys.stop()
         thresholdMonitor.stop()
         engine.stop()
         statusItem.remove()
@@ -76,16 +96,32 @@ final class AppCoordinator {
     // MARK: Actions
 
     private func togglePanel() {
-        if panel.isVisible {
-            panel.hide()
-        } else {
-            panel.show(anchoredTo: statusItem.anchorRect, on: statusItem.anchorScreen)
+        let anchor = statusItem.anchorRect
+        guard panel.isVisible else {
+            panelAnchor = anchor
+            panel.show(anchoredTo: anchor, on: statusItem.anchorScreen)
+            return
         }
+        // Clicking a second readout's item moves the panel under it. Dismissing there
+        // would read as the click having missed: the user pointed at a different item
+        // and got nothing.
+        if let anchor, let panelAnchor, anchor != panelAnchor {
+            self.panelAnchor = anchor
+            panel.reanchor(to: anchor, on: statusItem.anchorScreen)
+            return
+        }
+        panel.hide()
+        panelAnchor = nil
     }
 
     private func showSettings() {
         panel.hide()
         settingsWindow.show()
+    }
+
+    private func toggleOverlay() {
+        settingsStore.update { $0.overlay.isEnabled.toggle() }
+        overlay.syncWithSettings()
     }
 
     private func showContextMenu() {
@@ -103,10 +139,7 @@ final class AppCoordinator {
 
     @objc private func menuShowSettings() { showSettings() }
 
-    @objc private func menuToggleOverlay() {
-        settingsStore.update { $0.overlay.isEnabled.toggle() }
-        overlay.syncWithSettings()
-    }
+    @objc private func menuToggleOverlay() { toggleOverlay() }
 
     // MARK: System observers
 
@@ -159,7 +192,8 @@ final class AppCoordinator {
                     guard let self else { return }
                     self.overlay.screenConfigurationChanged()
                     if self.panel.isVisible {
-                        self.panel.reanchor(to: self.statusItem.anchorRect,
+                        self.panelAnchor = self.statusItem.anchorRect
+                        self.panel.reanchor(to: self.panelAnchor,
                                             on: self.statusItem.anchorScreen)
                     }
                 }
