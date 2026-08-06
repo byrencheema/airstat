@@ -55,7 +55,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     ///
     /// The render harness constructs `SettingsRootView` with no arguments, so the
     /// only way to inspect a pane other than the first is to let the environment
-    /// choose it. `AIRSTAT_SETTINGS_TAB=overlay AirStat --render settings` renders
+    /// choose it. `AIRSTAT_SETTINGS_TAB=overlay AirStats --render settings` renders
     /// the overlay pane; unset, it behaves exactly as the real window does.
     static var renderDefault: SettingsTab {
         guard let raw = ProcessInfo.processInfo.environment["AIRSTAT_SETTINGS_TAB"],
@@ -487,12 +487,43 @@ struct MenuBarPreview: NSViewRepresentable {
     }
 }
 
+/// Measures the readouts with the same view that draws them, so the strip can size a
+/// slot for them and tell when the bar runs past its edge. A throwaway view rather
+/// than a reimplementation of the layout, for the reason `MenuBarPreview` exists:
+/// a second measurement would drift from the first.
+@MainActor
+private enum MenuBarPreviewMetrics {
+    private static let prototype = MenuBarContentView(frame: .zero)
+
+    static func size(of model: MenuBarRenderModel) -> CGSize {
+        prototype.update(with: model)
+        return prototype.intrinsicContentSize
+    }
+}
+
 /// Presents the preview on a surface that reads as a menu bar, because contrast in
 /// the menu bar is the thing being judged and a preview on a form background would
 /// misrepresent it.
+///
+/// The strip is a viewport onto a bar wider than itself. A settings window 760 points
+/// across cannot show a screen's worth of menu bar — all sixteen readouts measure more
+/// than twice the room this row has — so they get a slot bounded by what is left
+/// beside the clock and scroll inside it. Letting them take their natural width is
+/// what pushed the sidebar and the pane out of the window frame; dropping the overflow
+/// instead of scrolling it would be a lie, since those readouts do fit in a real bar.
 struct MenuBarPreviewStrip: View {
     let model: MenuBarRenderModel
     let isEmpty: Bool
+
+    /// Width the readouts were actually given. Held against their natural width it is
+    /// the only thing that says whether the bar continues past the slot. Unbounded
+    /// until the first measurement lands, because starting at zero means every open
+    /// of the pane flashes the marker for a frame.
+    @State private var slotWidth: CGFloat = .infinity
+
+    private var naturalSize: CGSize { MenuBarPreviewMetrics.size(of: model) }
+
+    private var isTruncated: Bool { naturalSize.width - slotWidth > 0.5 }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -501,8 +532,15 @@ struct MenuBarPreviewStrip: View {
                 Text("No readouts are enabled.")
                     .font(.callout)
                     .foregroundStyle(Design.Palette.secondaryText)
+                    .lineLimit(1)
             } else {
-                MenuBarPreview(model: model)
+                readouts
+                if isTruncated {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(Design.Palette.tertiaryText)
+                        .padding(.leading, Design.Space.s)
+                        .accessibilityHidden(true)
+                }
             }
             Image(systemName: "wifi").foregroundStyle(Design.Palette.tertiaryText)
                 .padding(.leading, Design.Space.l)
@@ -510,6 +548,8 @@ struct MenuBarPreviewStrip: View {
                 .padding(.leading, Design.Space.m)
             Text(Date(), format: .dateTime.weekday(.abbreviated).hour().minute())
                 .foregroundStyle(Design.Palette.tertiaryText)
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.leading, Design.Space.l)
             Spacer(minLength: Design.Space.xl)
         }
@@ -520,6 +560,30 @@ struct MenuBarPreviewStrip: View {
                                                                   style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Menu bar preview")
-        .accessibilityValue(isEmpty ? "No readouts enabled" : model.accessibilityDescription)
+        .accessibilityValue(accessibilityValue)
+    }
+
+    /// The slot is capped at the readouts' natural width so a short bar still sits
+    /// centred, and floors at nothing so the window's width always wins.
+    private var readouts: some View {
+        ScrollView(.horizontal) {
+            MenuBarPreview(model: model)
+        }
+        .frame(maxWidth: naturalSize.width)
+        .frame(height: naturalSize.height)
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size.width, initial: true) { _, width in
+                        slotWidth = width
+                    }
+            }
+        }
+    }
+
+    private var accessibilityValue: String {
+        if isEmpty { return "No readouts enabled" }
+        guard isTruncated else { return model.accessibilityDescription }
+        return model.accessibilityDescription + ". Scroll the preview to see the rest"
     }
 }

@@ -228,10 +228,15 @@ struct SettingsRootView: View {
                                                            style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    // One element per row rather than a container holding an image
-                    // and a label, so VoiceOver announces "General, selected,
+                    // A Button already publishes its label subtree as one element, so
+                    // naming it here is all it takes to announce "General, selected,
                     // button" instead of walking into the row's decoration.
-                    .accessibilityElement(children: .ignore)
+                    //
+                    // Not `.accessibilityElement(children: .ignore)`, which reads the
+                    // same but builds a replacement element in place of the button and
+                    // so carries no press action. The rows still announced themselves
+                    // as buttons, because a trait is a description and not an action,
+                    // and nothing happened when VoiceOver activated them.
                     .accessibilityLabel(item.label)
                     .accessibilityAddTraits(item == tab ? [.isSelected, .isButton] : .isButton)
                     .accessibilityHint("Show \(item.label) settings")
