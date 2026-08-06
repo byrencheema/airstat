@@ -24,16 +24,31 @@ public struct ChartStats: Equatable, Sendable {
         var lo = Double.greatestFiniteMagnitude
         var hi = -Double.greatestFiniteMagnitude
         var sum = 0.0
-        for i in 0..<n {
-            let v = Double(ring[i])
-            if v < lo { lo = v }
-            if v > hi { hi = v }
-            sum += v
+        var newest: Float = 0
+        // Two contiguous runs rather than `ring[i]`: the subscript pays a bounds
+        // precondition, a wrap branch and an integer modulo per element, which for a
+        // full ring costs more than the whole walk. The runs are visited oldest run
+        // first, so the samples arrive in exactly the order the subscript gave them
+        // and the sum accumulates identically.
+        ring.withUnsafeRuns { older, newer in
+            for value in older {
+                let v = Double(value)
+                if v < lo { lo = v }
+                if v > hi { hi = v }
+                sum += v
+            }
+            for value in newer {
+                let v = Double(value)
+                if v < lo { lo = v }
+                if v > hi { hi = v }
+                sum += v
+            }
+            newest = newer.last ?? older[older.count - 1]
         }
         minimum = lo
         maximum = hi
         average = sum / Double(n)
-        last = Double(ring[n - 1])
+        last = Double(newest)
     }
 
     /// Enough samples to justify drawing a trend at all.
