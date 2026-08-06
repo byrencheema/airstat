@@ -48,15 +48,13 @@ public final class ThresholdMonitor {
         guard observationTask == nil else { return }
         // Observation-driven like the status item rather than a timer of its own: the
         // rules can only ever change answer when a new snapshot or a new setting lands.
+        let changes = ObservedChanges { [engine, settings] in
+            _ = engine.snapshot
+            _ = settings.revision
+        }
         observationTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
+            for await _ in changes {
                 guard let self else { return }
-                await ThresholdMonitor.awaitChange {
-                    _ = self.engine.snapshot
-                    _ = self.settings.revision
-                }
-                guard !Task.isCancelled else { return }
-                await Task.yield()
                 self.evaluate()
             }
         }
@@ -79,13 +77,6 @@ public final class ThresholdMonitor {
         }
         evaluator.reset()
         authorization = .undetermined
-    }
-
-    @MainActor
-    private static func awaitChange(_ track: @escaping () -> Void) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            withObservationTracking { track() } onChange: { continuation.resume() }
-        }
     }
 
     // MARK: Evaluation

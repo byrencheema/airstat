@@ -194,23 +194,12 @@ public final class GlobalHotKeyCenter {
     /// the way the overlay drives its window configuration.
     private func beginObservingSettings() {
         observationTask?.cancel()
+        let changes = settings.changes
         observationTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
+            for await _ in changes {
                 guard let self else { return }
-                await GlobalHotKeyCenter.awaitChange { _ = self.settings.revision }
-                guard !Task.isCancelled else { return }
-                // `onChange` fires before the new value is stored; yield so the write
-                // has landed before it is read back.
-                await Task.yield()
                 self.reconcile()
             }
-        }
-    }
-
-    @MainActor
-    private static func awaitChange(_ track: @escaping () -> Void) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            withObservationTracking { track() } onChange: { continuation.resume() }
         }
     }
 
