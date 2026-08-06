@@ -50,7 +50,8 @@ Things that cost time to learn and are not visible in the code.
     `CGSessionCopyCurrentDictionary` and confirm against a control app you know has
     windows. Two of us independently invented app-shaped explanations for this, one
     blaming `makeKey()` and one blaming activation state, and both fit the poisoned
-    data perfectly.
+    data perfectly. `AXIsProcessTrusted()` keeps answering true throughout, so the
+    permission being granted says nothing about whether the API will return anything.
   - An app with **no window open** reports an `AXWindows` array holding the
     application element itself. Walking it naively never terminates.
 - Synthesised input does not cover everything. `CGEvent` mouse clicks reach ordinary

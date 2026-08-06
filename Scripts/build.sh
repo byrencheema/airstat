@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds AirStat and assembles a launchable .app bundle.
+# Builds AirStats and assembles a launchable .app bundle.
 #
 # SwiftPM cannot produce an app bundle, and a menu bar app needs one: LSUIElement,
 # a bundle identifier for UserDefaults and notifications, and a code signature so

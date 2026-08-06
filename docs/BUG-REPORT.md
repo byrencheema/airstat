@@ -18,11 +18,47 @@ the `AirStat` to `AirStats` rename.
 A tenth was raised and then withdrawn. B10 is kept in place, marked WITHDRAWN, because
 the false reasoning behind it will catch the next person who tests this app.
 
+## Resolution, 2026-08-06
+
+All nine are fixed and committed. The suite that stood at 33 tests when this report
+was written now stands at 90, and the additions are regression tests for these
+findings specifically: `HotKeyTranslationTests`, `ThresholdEvaluatorTests`,
+`MetricsEngineActivityTests`, `MenuBarItemLayoutTests`, and a `MenuBarPane` test that
+holds a binding across the reset that used to trap.
+
+| Issue | Status | Commit |
+|---|---|---|
+| B1 crash on stale index | fixed, covered by test | `4cccc9b` |
+| B2 low power pause | fixed | `545a617` |
+| B3 public IP lookup | fixed | `3292532` |
+| B4 combine into one item | fixed | `cdb026c` |
+| B5 keyboard shortcuts | fixed, needs a human key press | `145c109` |
+| B6 threshold notifications | fixed | `9aede13` |
+| B7 preview layout break | fixed | `4b96e2b` |
+| B8 sidebar press action | fixed, AX re-verify outstanding | `4b96e2b` |
+| B9 rename leftovers | fixed | `1e56b96` |
+
+Two things this report asked for are still outstanding, both because they need a
+machine a person is sitting at:
+
+- **B8's before/after accessibility capture** and **B10's retest**. The screen was
+  locked again when this was checked on 2026-08-06 (`CGSSessionScreenIsLocked = 1`),
+  so an accessibility read would have returned the same empty tree that produced B10
+  in the first place. Nothing was concluded from it. See B10 for the retest recipe.
+- **B5's confirmation.** Synthesised key events do not trigger Carbon hot keys at all,
+  so `RegisterEventHotKey` succeeding is as far as automation reaches. The three
+  shortcuts need a real key press.
+
+The right-click context menu named under "Not covered" is unchanged and still needs a
+human click.
+
 ---
 
 ## B1. Crash: `MenuBarPane` reads a stale index after the readout list shrinks
 
 **Severity:** critical, the whole app dies
+**Status:** FIXED in `4cccc9b`. The bindings now key off `MenuBarItemConfig.ID` and the
+getters answer from the captured item, so nothing subscripts by a captured index.
 **File:** `Sources/AirStatUI/Settings/MenuBarPane.swift:224`, `:240`, `:250`
 **Crash reports:** `~/Library/Logs/DiagnosticReports/AirStats-2026-08-05-224135.ips`,
 `AirStats-2026-08-05-224256.ips`
@@ -91,6 +127,9 @@ Guard every getter, or key the bindings off `MenuBarItemConfig.ID` the way
 ## B2. "Pause sampling on Low Power Mode" does nothing
 
 **Severity:** high, an advertised power feature is absent
+**Status:** FIXED in `545a617`. `MetricsEngine` reads the preference at `:139` and
+suspends sampling, ranked below the panel and overlay so an open surface is never
+frozen with no way to refresh.
 **File:** `Sources/AirStatUI/Settings/GeneralPane.swift:23`
 
 `general.pausesOnLowPower` is declared in `Settings.swift:690`, coded and decoded,
@@ -109,6 +148,9 @@ Compare `general.throttlesWhenOccluded`, which is wired at
 ## B3. "Look up my public IP address" does nothing, and there is nowhere to show it
 
 **Severity:** high, a privacy-framed toggle that implies a network call it never makes
+**Status:** FIXED in `3292532`. `PublicIPFetcher` is the fetcher the comment promised,
+gated on the toggle and throttled, and the network module's detail now has a row to
+show the result.
 **File:** `Sources/AirStatUI/Settings/GeneralPane.swift:59`
 
 `general.fetchesPublicIP` is never read. `NetworkCollector.swift:286` hardcodes
@@ -130,6 +172,9 @@ request is not there to control.
 ## B4. "Combine into one menu bar item" does nothing
 
 **Severity:** high, and the UI carries a footnote describing behaviour that does not exist
+**Status:** FIXED in `cdb026c`. `StatusItemController` holds one item per enabled
+readout when the switch is off, which makes the footnote's second sentence true rather
+than removing it.
 **File:** `Sources/AirStatUI/Settings/MenuBarPane.swift:45`
 
 `menuBar.usesCombinedItem` is never read outside the toggle.
@@ -153,6 +198,9 @@ None of that second sentence is true today.
 ## B5. Keyboard shortcuts are recorded, stored, and never registered
 
 **Severity:** high, three visible controls with no effect
+**Status:** FIXED in `145c109`. `GlobalHotKeyCenter` registers the stored bindings
+through Carbon's `RegisterEventHotKey`. Automation cannot confirm this: synthesised key
+events do not trigger Carbon hot keys, so the three shortcuts need a real key press.
 **File:** `Sources/AirStatUI/Settings/ShortcutRecorder.swift:177`
 
 The General pane offers Show / Hide Panel, Show / Hide Overlay and Open Settings.
@@ -170,6 +218,9 @@ the overlay grab gesture).
 ## B6. Notification rules drive a monitor that is an empty stub
 
 **Severity:** high, an entire settings pane is inert
+**Status:** FIXED in `9aede13`. `ThresholdMonitor` requests authorisation, evaluates
+rules with their sustained durations and cooldowns, and delivers through
+`UNUserNotificationCenter`.
 **File:** `Sources/AirStatUI/Support/ThresholdMonitor.swift:19`
 
 ```swift
@@ -195,6 +246,10 @@ persists correctly and none of it can ever fire.
 ## B7. The Menu Bar pane's preview blows the settings window layout apart
 
 **Severity:** medium, visible corruption at a reachable configuration
+**Status:** FIXED in `4b96e2b`. The readouts scroll horizontally inside a slot bounded
+by the room left beside the clock, with an ellipsis marking a bar that continues past
+it. Dropping the overflow instead of scrolling it would have been a lie, since those
+readouts do fit in a real menu bar.
 **File:** `Sources/AirStatUI/Settings/SettingsSupport.swift:493` (`MenuBarPreviewStrip`)
 
 `MenuBarPreviewStrip` lays its content out in an `HStack` with
@@ -222,6 +277,11 @@ the real menu bar truncates.
 ## B8. The settings sidebar exposes no press action to assistive technology
 
 **Severity:** medium, VoiceOver cannot change panes
+**Status:** FIXED in `4b96e2b`, re-verification still outstanding.
+`.accessibilityElement(children: .ignore)` is gone, so the `Button` publishes its own
+element and keeps its press action, and a hint was added. The before/after
+accessibility capture has not been taken: the screen was locked on both 2026-08-05 and
+2026-08-06. See B10.
 **File:** `Sources/AirStatUI/Settings/SettingsWindowController.swift:233`
 
 Each sidebar row is a real `Button`, but the accessibility modifiers applied outside
@@ -255,6 +315,11 @@ explicit `.accessibilityAction`.
 ## B9. Rename leftovers: the app calls itself "AirStat" in four user-visible places
 
 **Severity:** low, but it is on the launch surface
+**Status:** FIXED in `1e56b96`. The three strings now say AirStats. The bundle
+identifier was kept and `Info.plist` carries the comment this report asked for, saying
+why changing it would orphan every existing user's settings. `build.sh` names the
+resource bundle exactly instead of globbing, so a tree built under both names no longer
+ships both. The script's own header comment was the last leftover and is now fixed.
 
 | Location | Text |
 |---|---|
@@ -349,6 +414,22 @@ their windows, it is closed for good. Two minutes of work.
 B8 is unaffected either way: it was measured before the lock. Its fix is written and
 builds clean, but its before/after accessibility capture is still outstanding for the
 same reason, so B8 is **fixed but not yet re-verified**.
+
+### Retest attempted 2026-08-06, blocked again
+
+The lock check was run first this time, which is the whole point of writing it down:
+
+```
+CGSSessionScreenIsLocked = 1
+kCGSSessionOnConsoleKey  = 1
+AXIsProcessTrusted       = true
+```
+
+The screen was locked, so no accessibility read was taken and nothing was concluded.
+Note that `AXIsProcessTrusted` still answers true while the screen is locked, so the
+permission being granted is not evidence the API will return anything. B10 and B8's
+capture both still need a person at an unlocked machine. The recipe above is unchanged
+and still about two minutes of work.
 
 ---
 
