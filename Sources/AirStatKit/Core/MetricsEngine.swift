@@ -40,7 +40,13 @@ public final class MetricsEngine {
     private var isOverlayVisible = false
     private var isMenuBarOccluded = false
     private var isSystemAsleep = false
+    /// Established by `beginObservingPowerState()` rather than at init, so the engine's
+    /// low-power state has exactly one entry point.
+    private var isLowPowerMode = false
+    /// Snapshots ingested, counted only as far as `isLowPowerPaused` needs.
+    private var ingestCount = 0
     private var observationTask: Task<Void, Never>?
+    private var powerStateObserver: NSObjectProtocol?
 
     public init(settingsStore: SettingsStore) {
         self.settingsStore = settingsStore
@@ -60,11 +66,19 @@ public final class MetricsEngine {
         applySettings()
         core.start()
         beginObservingSettings()
+        beginObservingPowerState()
     }
+
+    /// True while the power-state observer is installed. The notification centre keeps
+    /// block observers alive until they are removed and nothing looks wrong when one
+    /// outlives its owner, so the state is exposed for verification rather than left
+    /// to be reasoned about.
+    public var isObservingPowerState: Bool { powerStateObserver != nil }
 
     public func stop() {
         observationTask?.cancel()
         observationTask = nil
+        endObservingPowerState()
         core?.stop()
         core = nil
     }
@@ -104,7 +118,26 @@ public final class MetricsEngine {
         updateActivity()
     }
 
+    /// Sets the Low Power Mode state. `start()` wires this to the process's own
+    /// notification; it is public so the state can be driven directly, which is the
+    /// only way to exercise the pause without changing the machine's power settings.
+    public func setLowPowerMode(_ enabled: Bool) {
+        guard enabled != isLowPowerMode else { return }
+        isLowPowerMode = enabled
+        updateActivity()
+    }
+
     public func refreshNow() { core?.sampleNow() }
+
+    /// True when the user asked for a pause, the machine is in Low Power Mode, and
+    /// there is something to freeze on.
+    ///
+    /// Rate-based collectors report nothing until their second sample, so an app
+    /// launched into an already-on Low Power Mode would pause on a menu bar reading
+    /// "unavailable". A paused app should show the last real numbers, not no numbers.
+    private var isLowPowerPaused: Bool {
+        ingestCount >= 2 && isLowPowerMode && settingsStore.settings.general.pausesOnLowPower
+    }
 
     private func updateActivity() {
         let newActivity: SamplingActivity
@@ -114,6 +147,12 @@ public final class MetricsEngine {
             newActivity = .panel
         } else if isOverlayVisible {
             newActivity = .overlay
+        } else if isLowPowerPaused {
+            // Ranked below the surfaces the user opened deliberately and above the
+            // occlusion throttle: a pause is the stronger of the two power measures,
+            // but freezing a panel the user is looking at would show them stale numbers
+            // with no way to refresh, since a suspended core ignores `sampleNow`.
+            newActivity = .suspended
         } else if isMenuBarOccluded && settingsStore.settings.general.throttlesWhenOccluded {
             newActivity = .occluded
         } else {
@@ -163,10 +202,39 @@ public final class MetricsEngine {
         }
     }
 
-    private func applySettings() {
+    /// Low Power Mode is a state the user flips mid-session, so the pause has to
+    /// follow it live rather than being decided once at launch.
+    func beginObservingPowerState() {
+        guard powerStateObserver == nil else { return }
+        powerStateObserver = NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.setLowPowerMode(ProcessInfo.processInfo.isLowPowerModeEnabled)
+                }
+        }
+        // The notification only reports changes, so the state as it stands right now
+        // has to be read out. It comes from the process rather than from
+        // `snapshot.power.isLowPowerMode`, which the power collector samples: a snapshot
+        // is a product of sampling, so a state that pauses sampling would latch on at
+        // the last sample taken and could never see itself clear.
+        setLowPowerMode(ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+
+    func endObservingPowerState() {
+        guard let powerStateObserver else { return }
+        NotificationCenter.default.removeObserver(powerStateObserver)
+        self.powerStateObserver = nil
+    }
+
+    func applySettings() {
         let s = settingsStore.settings
         core?.setBaseInterval(s.general.updateInterval)
         core?.setEnabledSources(currentRequiredSources)
+        core?.setPublicIPLookupEnabled(s.general.fetchesPublicIP)
+        // Turning the pause off has to resume sampling now, not at whatever UI
+        // transition happens to call `updateActivity` next.
+        updateActivity()
 
         let capacity = s.historyCapacity
         if history.capacity != capacity { history.resize(to: capacity) }
@@ -177,10 +245,14 @@ public final class MetricsEngine {
 
     // MARK: Ingest
 
-    private func ingest(_ new: SystemSnapshot) {
+    func ingest(_ new: SystemSnapshot) {
         snapshot = new
         lastUpdate = new.capturedAt
         record(new)
+        guard ingestCount < 2 else { return }
+        ingestCount += 1
+        // The pause that was waiting for rates to exist can take effect now.
+        updateActivity()
     }
 
     /// Fold a snapshot into history. Only series whose metric is actually available
