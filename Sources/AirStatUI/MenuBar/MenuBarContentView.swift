@@ -31,6 +31,7 @@ public final class MenuBarContentView: NSView {
     private var fonts = FontSet(monospacedDigits: true)
     private var textCache: [TextKey: CachedText] = [:]
     private var symbolCache: [String: NSImage] = [:]
+    private var tintedSymbolCache: [TintKey: NSImage] = [:]
     /// Reused across draws so downsampling a graph allocates nothing in steady state.
     private var columnScratch: [CGFloat] = []
 
@@ -189,7 +190,7 @@ public final class MenuBarContentView: NSView {
         let item: MenuBarItemRender
         var x: CGFloat
         let geometry: Geometry
-        let symbol: NSImage?
+        let symbol: SymbolAsset?
     }
 
     /// Widths of an item's parts, left to right. Every one of them is derived from the
@@ -241,7 +242,7 @@ public final class MenuBarContentView: NSView {
         item.caption != nil && item.style.drawsValue && !item.isUnavailable
     }
 
-    private func geometry(for item: MenuBarItemRender, symbol: NSImage?,
+    private func geometry(for item: MenuBarItemRender, symbol: SymbolAsset?,
                           model: MenuBarRenderModel) -> Geometry {
         var geometry = Geometry()
         if let caption = item.caption, !isStacked(item) {
@@ -270,7 +271,7 @@ public final class MenuBarContentView: NSView {
             return geometry
         }
 
-        if let symbol { geometry.symbol = ceil(symbol.size.width) }
+        if let symbol { geometry.symbol = ceil(symbol.template.size.width) }
         if hasGraph(item) { geometry.graph = Layout.graphWidth }
 
         guard item.style.drawsValue else { return geometry }
@@ -799,15 +800,13 @@ public final class MenuBarContentView: NSView {
         return true
     }
 
-    private func draw(_ image: NSImage, color: NSColor, at center: CGPoint, scale: CGFloat) {
+    private func draw(_ asset: SymbolAsset, color: NSColor, at center: CGPoint, scale: CGFloat) {
+        guard let image = tinted(asset, color: color, scale: scale) else { return }
         let size = image.size
         let rect = CGRect(x: snap(center.x, scale),
                           y: snap(center.y - size.height / 2, scale),
                           width: size.width, height: size.height)
-        NSGraphicsContext.saveGraphicsState()
-        color.set()
         image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
-        NSGraphicsContext.restoreGraphicsState()
     }
 
     // MARK: Text
@@ -855,9 +854,10 @@ public final class MenuBarContentView: NSView {
         return cached
     }
 
-    private func symbol(for item: MenuBarItemRender) -> NSImage? {
+    private func symbol(for item: MenuBarItemRender) -> SymbolAsset? {
         guard item.style == .iconAndText, let name = item.symbolName else { return nil }
-        return symbol(named: name, pointSize: Layout.symbolSize)
+        guard let template = symbol(named: name, pointSize: Layout.symbolSize) else { return nil }
+        return SymbolAsset(name: name, pointSize: Layout.symbolSize, template: template)
     }
 
     private func symbol(named name: String, pointSize: CGFloat) -> NSImage? {
@@ -869,6 +869,85 @@ public final class MenuBarContentView: NSView {
         configured.isTemplate = true
         symbolCache[key] = configured
         return configured
+    }
+
+    /// A symbol the view has looked up, kept with the two things needed to re-render it
+    /// in a colour: `NSImage` alone cannot say what it is an image *of*.
+    private struct SymbolAsset {
+        let name: String
+        let pointSize: CGFloat
+        let template: NSImage
+    }
+
+    /// One rasterisation of a symbol. The colour is resolved, not the `NSColor` handed
+    /// in: `labelColor` is one object that means white in one appearance and black in
+    /// the other, so keying on it would serve a light-mode bitmap to a dark menu bar.
+    private struct TintKey: Hashable {
+        let name: String
+        let pointSize: CGFloat
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+        let scale: CGFloat
+    }
+
+    /// The symbol, in the colour it is meant to be.
+    ///
+    /// A template `NSImage` is tinted by AppKit only when a control draws it — a cell, a
+    /// button, a menu item. Drawn by hand into a view's context it keeps its own black
+    /// ink, whatever colour is set beforehand, so `Icon & Text` came out black on a dark
+    /// menu bar and all but disappeared. The tint has to be applied to the image rather
+    /// than asked of the context.
+    ///
+    /// The `.sourceIn` pass that does it composites against everything already in the
+    /// context, so it cannot run in the menu bar's own context without wiping the
+    /// readouts drawn to the left of the symbol. It runs in a private bitmap instead and
+    /// the result composites normally. Bitmaps are cached: a colour here changes on
+    /// appearance, highlight and staleness, which is a handful of values over a session,
+    /// not one per frame.
+    private func tinted(_ asset: SymbolAsset, color: NSColor, scale: CGFloat) -> NSImage? {
+        guard let resolved = color.usingColorSpace(.sRGB) else { return asset.template }
+        let key = TintKey(name: asset.name, pointSize: asset.pointSize,
+                          red: resolved.redComponent, green: resolved.greenComponent,
+                          blue: resolved.blueComponent, alpha: resolved.alphaComponent,
+                          scale: scale)
+        if let cached = tintedSymbolCache[key] { return cached }
+        guard let image = rasterize(asset, color: resolved, scale: scale) else { return nil }
+        if tintedSymbolCache.count >= 64 { tintedSymbolCache.removeAll(keepingCapacity: true) }
+        tintedSymbolCache[key] = image
+        return image
+    }
+
+    private func rasterize(_ asset: SymbolAsset, color: NSColor, scale: CGFloat) -> NSImage? {
+        let size = asset.template.size
+        let wide = Int((size.width * scale).rounded(.up))
+        let high = Int((size.height * scale).rounded(.up))
+        guard wide > 0, high > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wide, pixelsHigh: high,
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                         isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        // Before the context is made: this is what tells it the bitmap is `scale` device
+        // pixels to the point rather than one, and a context built off the default 1:1
+        // draws a 13-point symbol into the corner of a 26-pixel bitmap.
+        rep.size = size
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+
+        let rect = CGRect(origin: .zero, size: size)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        asset.template.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+        color.setFill()
+        rect.fill(using: .sourceIn)
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        // The colour is in the pixels now. Left as a template it would be handed back to
+        // AppKit's own tinting inside the status button and painted over.
+        image.isTemplate = false
+        return image
     }
 
     // MARK: Pixel grid
