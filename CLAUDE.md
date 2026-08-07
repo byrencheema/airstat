@@ -82,3 +82,11 @@ Things that cost time to learn and are not visible in the code.
 - The status item redraws only when `MenuBarRenderModel` changes, so anything that
   affects its drawing must travel in the model as data, not be read from a global by
   the view.
+- A template `NSImage` is tinted by AppKit only when a *control* draws it. Setting a
+  fill colour and calling `image.draw(in:)` from a view's own `draw` paints the
+  symbol's black ink, which is invisible on a dark menu bar and looks like a colour
+  bug rather than a drawing-path one. Tint the image instead: rasterise into an
+  `NSBitmapImageRep` and fill `.sourceIn`. That pass composites against everything
+  already in the context, so it cannot run in the destination context, and the
+  resulting image has to have `isTemplate = false` or AppKit paints over it again.
+  Cache on the *resolved* colour — `labelColor` is one object meaning two colours.
