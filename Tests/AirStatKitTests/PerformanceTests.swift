@@ -109,21 +109,27 @@ struct PerformanceTests {
                 + String(format: "%.0fx", single.fastestNanoseconds / copy.fastestNanoseconds)
                 + " the cost of copying the same samples")
 
-        // The point of ChartStats existing. If a change ever makes the three-walk form
-        // competitive, ChartStats has stopped earning its place.
+        // What this guards is that ChartStats does not fall *behind* the naive form. It
+        // is not faster than it, and the assertion used to say it was.
         //
-        // This assertion has now caught that twice, which is the whole reason it is an
-        // assertion rather than a comment. Once when the ring's own walks were made
-        // contiguous and ChartStats was left on the old subscript, and once in release
-        // when its branches turned out to be blocking vectorisation. Both times the
-        // one-pass premise had quietly stopped being true.
-        #expect(single.fastestNanoseconds < triple.fastestNanoseconds,
-                "ChartStats should be faster than three separate O(n) walks")
+        // That claim survived as long as it did because it was only ever checked in a
+        // debug build: the release suite never once ran to completion, so the release
+        // figure written beside it had never been measured. When it finally ran, one
+        // fused loop measured 6.0 µs against 3.3 µs for three separate walks — the
+        // premise inverted. Splitting the reductions into a loop each brought it to
+        // 3.21 µs against 3.17 µs, which is the real answer: ChartStats performs exactly
+        // the same three walks, so it costs exactly the same, and what it actually buys
+        // is one buffer setup and one call site rather than three.
+        //
+        // So the bound is one-sided and has slack in it. Asserting `<` between two
+        // numbers that are 1% apart is a coin toss, and a test that flips on noise
+        // teaches everyone to ignore it.
+        #expect(single.fastestNanoseconds < triple.fastestNanoseconds * 1.25,
+                "ChartStats has fallen behind three separate O(n) walks")
 
-        // Debug figure. ChartStats is deliberately written for release, where it is
-        // roughly 1.8 µs and 2.5x the three walks; at `-Onone` the branchless `min`/`max`
-        // it uses are un-inlined calls and it measures worse than the branchy version it
-        // replaced. See the suite comment. Judge this one in release, not here.
+        // Debug figure; in release this is around 3.2 µs. At `-Onone` the branchless
+        // `min`/`max` it uses are un-inlined calls and it measures worse than the branchy
+        // version it replaced. See the suite comment. Judge the shape of this in release.
         expectWithinBudget(single, nanoseconds: 100_000)
     }
 

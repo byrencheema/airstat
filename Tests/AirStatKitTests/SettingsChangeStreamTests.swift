@@ -36,6 +36,33 @@ struct SettingsChangeStreamTests {
         for _ in 0..<turns { await Task.yield() }
     }
 
+    /// Waits for something the observer does, rather than for a number of turns.
+    ///
+    /// The turn count used to be the wait, and it was a claim about scheduling that no
+    /// part of the contract makes: delivery goes through an enqueued main-actor turn so
+    /// the write has landed before the loop body reads it, and how many yields that
+    /// takes is the runtime's business and differs between debug and release. Counting
+    /// turns produced a suite that passed in one configuration, failed in the other, and
+    /// was measuring the scheduler either way. What the stream actually promises is that
+    /// the change arrives, so that is what is waited for.
+    @discardableResult
+    private func settle(until condition: @MainActor () -> Bool,
+                        within timeout: Duration = .milliseconds(500)) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return condition()
+    }
+
+    /// Gives anything that was going to happen time to happen, for the assertions that
+    /// nothing did. There is no edge to wait for when the expected outcome is silence.
+    private func settleQuietly() async {
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+
     @Test("a change wakes the loop, and the body reads the value that woke it")
     func deliversTheLandedWrite() async {
         let store = makeStore()
@@ -50,13 +77,13 @@ struct SettingsChangeStreamTests {
         await pump()
 
         store.update { $0.general.updateInterval = 5 }
-        await pump()
+        await settle { seen.revisions.count == 1 }
         // 1, not 0: the bump that woke the loop has landed by the time the body runs.
         #expect(seen.revisions == [1])
         #expect(seen.intervals == [5])
 
         store.update { $0.general.updateInterval = 7 }
-        await pump()
+        await settle { seen.revisions.count == 2 }
         #expect(seen.revisions == [1, 2])
         #expect(seen.intervals == [5, 7])
 
@@ -74,7 +101,7 @@ struct SettingsChangeStreamTests {
         await pump()
 
         store.update { $0.general.updateInterval = store.settings.general.updateInterval }
-        await pump()
+        await settleQuietly()
         #expect(seen.revisions.isEmpty)
 
         task.cancel()
@@ -94,13 +121,56 @@ struct SettingsChangeStreamTests {
         }
         await pump()
 
-        engine.ingest(.empty)
-        await pump()
+        // A snapshot that differs from the one the engine already holds. Ingesting
+        // `.empty` into a fresh engine assigns the value it is already on, and an
+        // assignment that changes nothing does not reliably notify: it woke this loop in
+        // a debug build and did not in a release one. The test means "the engine
+        // changed", so it has to actually change it.
+        engine.ingest(SnapshotFixtures.nominal)
+        await settle { wakeups == 1 }
         #expect(wakeups == 1)
 
         store.update { $0.general.updateInterval = 9 }
-        await pump()
+        await settle { wakeups == 2 }
         #expect(wakeups == 2)
+
+        task.cancel()
+    }
+
+    /// The bug this suite was rewritten around. Observation is a one-shot registration,
+    /// and renewing it inside `next()` leaves the loop unobserved for as long as the
+    /// iterator takes to get back there — `next()` is not actor-isolated, so even a loop
+    /// running on the main actor hops off it and back to reach the registration. A
+    /// change made in that gap reached nobody, and because the gap reopened after every
+    /// element, the effect in the app was a setting that quietly did not take effect
+    /// until some later change happened along. Optimised builds lost this race almost
+    /// every time and debug builds almost never, so it was invisible until the release
+    /// suite ran.
+    ///
+    /// Time-based on purpose: a body that is slow is the thing that makes the gap wide
+    /// enough to aim at. Yields cannot express "while the body is still running".
+    @Test("a change made while the loop body is still running is not dropped")
+    func changeDuringTheBodyIsKept() async {
+        let store = makeStore()
+        let seen = Sightings()
+        let changes = store.changes
+        let task = Task { @MainActor in
+            for await _ in changes {
+                seen.revisions.append(store.revision)
+                try? await Task.sleep(for: .milliseconds(60))
+            }
+        }
+        await pump()
+
+        store.update { $0.general.updateInterval = 5 }
+        // The body is in its sleep once the first element has been recorded.
+        await settle { seen.revisions.count == 1 }
+        #expect(seen.revisions == [1])
+
+        // Nothing is suspended on the stream right now. This has to be held, not lost.
+        store.update { $0.general.updateInterval = 7 }
+        await settle { seen.revisions.count == 2 }
+        #expect(seen.revisions == [1, 2])
 
         task.cancel()
     }

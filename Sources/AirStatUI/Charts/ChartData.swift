@@ -34,23 +34,29 @@ public struct ChartStats: Equatable, Sendable {
         // `min`/`max` rather than `if v < lo { lo = v }`, and in `Float` rather than
         // widening first: a compare-and-assign branch stops the loop vectorising, and
         // an optimised build then loses to three separate reductions over the same
-        // runs. Measured in release before this was written, the branchy fused loop
-        // took 8.2 µs against 4.5 µs for `maximum + minimum + average`, which is the
-        // one-pass premise of this type inverting itself. Neither the result nor the
-        // accumulation order changes: widening `Float` to `Double` is exact, so
-        // comparing before widening picks the same samples, and the sum is still
-        // accumulated in `Double`.
+        // runs. Neither the result nor the accumulation order changes: widening `Float`
+        // to `Double` is exact, so comparing before widening picks the same samples, and
+        // the sum is still accumulated in `Double`.
+        //
+        // One reduction per loop, not all three fused into one. Fusing them is the
+        // obvious reading of "single pass" and it is slower: `min` and `max` over
+        // `Float` vectorise, a `Double` running sum cannot — Swift will not reassociate
+        // floating-point addition — and interleaving the two puts a per-element convert
+        // and a serial add in the middle of the loop that would otherwise have gone wide.
+        // Measured in release, the fused form took 6.0 µs against 3.3 µs for three
+        // separate walks, which is the one-pass premise of this type inverting itself;
+        // split like this it is 3.21 µs against 3.17 µs. So this is not faster than
+        // calling the ring's own three reductions and was never going to be — it is the
+        // same three walks. What it is worth having for is the single `withUnsafeRuns`,
+        // one wrap decision, and one call site that cannot read a ring three different
+        // ways by accident.
         ring.withUnsafeRuns { older, newer in
-            for value in older {
-                lo = Swift.min(lo, value)
-                hi = Swift.max(hi, value)
-                sum += Double(value)
-            }
-            for value in newer {
-                lo = Swift.min(lo, value)
-                hi = Swift.max(hi, value)
-                sum += Double(value)
-            }
+            for value in older { lo = Swift.min(lo, value) }
+            for value in newer { lo = Swift.min(lo, value) }
+            for value in older { hi = Swift.max(hi, value) }
+            for value in newer { hi = Swift.max(hi, value) }
+            for value in older { sum += Double(value) }
+            for value in newer { sum += Double(value) }
             newest = newer.last ?? older[older.count - 1]
         }
         minimum = Double(lo)

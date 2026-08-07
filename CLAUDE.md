@@ -82,6 +82,14 @@ Things that cost time to learn and are not visible in the code.
 - The status item redraws only when `MenuBarRenderModel` changes, so anything that
   affects its drawing must travel in the model as data, not be read from a global by
   the view.
+- Assigning an `@Observable` property the value it already holds does not reliably
+  notify: measured firing `onChange` in a debug build and not in a release one. Never
+  write a test that wakes an observer by re-assigning an unchanged value.
+- `AsyncIteratorProtocol.next()` is not isolated to anything, so a `for await` on the
+  main actor still leaves it and comes back on every element. Anything the iterator
+  does to arm itself therefore happens after a thread hop, not in the caller's turn.
+  Implement `next(isolation:)` to inherit the caller's actor, and never let a one-shot
+  registration be renewed inside `next()` — see `ObservedChanges`.
 - A template `NSImage` is tinted by AppKit only when a *control* draws it. Setting a
   fill colour and calling `image.draw(in:)` from a view's own `draw` paints the
   symbol's black ink, which is invisible on a dark menu bar and looks like a colour
