@@ -12,6 +12,14 @@ opens no network connections.
 
 ![The panel](docs/panel-light.png)
 
+## Install
+
+[**Download AirStats**](https://github.com/byrencheema/airstat/releases/latest/download/AirStats.dmg)
+, open it, and drag the app to Applications. It is signed and notarized, so it opens
+with no warning.
+
+Building from source is below if you would rather.
+
 ## Why it exists
 
 Menu bar monitors are supposed to be background software, and a lot of them are not.
@@ -26,9 +34,15 @@ across 160 paired samples:
 
 That 11 MB is a cold instance whose panel has never been opened. A warm one, after the
 panel and settings have drawn, sits near 70 MB and does not give it back. Both numbers
-are in the full write-up, along with the accuracy checks: every collector was probed
+are in the [full write-up][benchmark], along with the accuracy checks: every collector was probed
 against an independent kernel source (`vm_stat`, `sysctl`, `netstat -ib`, `ioreg`,
 `pmset`) and matched on 48 of 48 checks.
+
+`vm_stat`, `sysctl`, `netstat -ib`, `ioreg` and `pmset` each get their own note in the
+[blog][blog], along with why a GPU can read 98% idle and still be busy.
+
+[benchmark]: https://airstat-site.vercel.app/blog/airstat-vs-stats-vs-istat-menus
+[blog]: https://airstat-site.vercel.app/blog
 
 ## Requirements
 
@@ -36,7 +50,7 @@ against an independent kernel source (`vm_stat`, `sysctl`, `netstat -ib`, `ioreg
 - Swift 6 toolchain (Xcode 16)
 - Apple Silicon or Intel
 
-## Build and install
+## Build from source
 
 ```sh
 Scripts/build.sh release
@@ -48,12 +62,17 @@ open /Applications/AirStats.app
 macOS grants a status item only to a signed bundle with `LSUIElement` set. Run the
 script with no argument for a debug build.
 
+An ad-hoc signature is enough to run a build you made yourself, and not enough to
+travel: macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh`
+is what produces the download above, signing with a Developer ID certificate and
+stapling Apple's notarization ticket to the `.dmg`.
+
 ## Verify it without a screen
 
 The binary samples collectors and draws its own UI offscreen.
 
 ```sh
-swift test                                  # 32 tests, some of which read real sensors
+swift test                                  # 180 tests, some of which read real sensors
 .build/debug/AirStats --probe cpu --repeat 5 # sample a collector and print what it got
 .build/debug/AirStats --render panel --dark  # write PNGs of a surface to ./render
 .build/debug/AirStats --help
@@ -76,6 +95,7 @@ for a second during spin-down.
 | `Sources/AirStats` | The executable, app delegate, and the probe and render commands. |
 | `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
+| `Scripts/release.sh` | Signs, notarizes and packages the `.dmg` that ships. |
 
 `AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
 run in a windowless process.

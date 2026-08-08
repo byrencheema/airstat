@@ -19,7 +19,12 @@ PROFILE="${NOTARY_PROFILE:-AirStats}"
 DIST="dist"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-DMG="$DIST/AirStats-$VERSION.dmg"
+
+# Deliberately unversioned. The README and the site both link
+# releases/latest/download/AirStats.dmg, which resolves only against an asset of
+# exactly that name, so putting the version in the filename breaks the one URL that
+# never has to be updated. The version lives in the git tag and in the bundle.
+DMG="$DIST/AirStats.dmg"
 
 if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
   echo "error: no '$IDENTITY' certificate in the keychain." >&2
@@ -52,7 +57,7 @@ codesign --verify --strict --deep "$APP"
 # Notarize the app itself before packaging so the ticket can be stapled into the
 # bundle. Stapling only the .dmg leaves the copy the user drags to /Applications
 # without a ticket, and its first launch then needs a working network to verify.
-ZIP="$DIST/AirStats-$VERSION-app.zip"
+ZIP="$DIST/AirStats-app.zip"
 mkdir -p "$DIST"
 rm -f "$ZIP" "$DMG"
 ditto -c -k --keepParent "$APP" "$ZIP"
@@ -78,4 +83,4 @@ xcrun stapler staple "$DMG"
 # what they would see instead of the app opening.
 spctl --assess --type open --context context:primary-signature -v "$DMG"
 
-echo "$DMG"
+echo "$DMG (version $VERSION)"
