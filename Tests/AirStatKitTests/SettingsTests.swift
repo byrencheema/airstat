@@ -17,6 +17,18 @@ struct SettingsDecodingTests {
         #expect(settings.panel.collapsedModules == PanelSettings.defaultCollapsed)
     }
 
+    /// Asserted by content, not against the constant the app reads. The defaults check
+    /// above compares `collapsedModules` to `PanelSettings.defaultCollapsed`, which
+    /// stays true no matter what that constant is changed to and so cannot notice a
+    /// module quietly starting open.
+    @Test("the panel opens with every module closed")
+    func panelStartsFullyCollapsed() {
+        let collapsed = PanelSettings().collapsedModules
+        for module in PanelModule.allCases {
+            #expect(collapsed.contains(module), "\(module.label) starts open")
+        }
+    }
+
     @Test("a malformed key falls back without losing its siblings")
     func malformedKeyIsIsolated() throws {
         let settings = try decode("""

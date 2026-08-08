@@ -374,16 +374,22 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         self.collapsedModules = collapsedModules
     }
 
-    /// Everything except CPU and Memory starts collapsed.
+    /// Every module starts collapsed.
     ///
     /// A collapsed module still shows its heading and its headline value, so nothing
     /// glanceable is lost — only the detail rows are hidden. With all nine expanded the
     /// panel is ~736pt, about 80% of the usable height on a 14-inch MacBook, and every
-    /// module competes at equal weight. Collapsed by default it reads as a summary you
-    /// can scan, and the detail is one click away where the user actually wants it.
-    public static let defaultCollapsed: Set<PanelModule> = [
-        .gpu, .network, .disk, .battery, .thermal, .processes, .system,
-    ]
+    /// module competes at equal weight. Collapsed it reads as a summary you can scan,
+    /// and the detail is one click away where the user actually wants it.
+    ///
+    /// CPU and Memory used to be left open, on the reasoning that a panel opening to
+    /// nothing but headings looks inert. It reads as an inconsistency instead: two
+    /// modules are already showing detail nobody asked for, the panel opens at an
+    /// awkward in-between height, and the two that happen to be open are the two
+    /// someone chose years ago rather than the two this user cares about. Uniformly
+    /// closed is the shorter, quieter, more predictable panel — and every module is
+    /// one click from open.
+    public static let defaultCollapsed: Set<PanelModule> = Set(PanelModule.allCases)
 
     /// Every module, in declaration order. Was a stored order plus an enabled set;
     /// with the ordering and toggling UI gone there is one canonical arrangement, and
