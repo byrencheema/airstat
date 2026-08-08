@@ -83,7 +83,7 @@ public final class StatusItemController {
 
     /// The combined item keeps the name it has always had, so an install that predates
     /// separate items does not lose the position the user dragged it to.
-    static let combinedAutosaveName = "AirStatStatusItem"
+    static let combinedAutosaveName = "AirStatsStatusItem"
 
     /// Per-readout items are keyed by the readout's own id rather than by its metric.
     /// Two readouts of the same metric are allowed, and keyed by metric they would

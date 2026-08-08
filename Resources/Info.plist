@@ -6,11 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>AirStats</string>
-	<!-- Deliberately still the pre-rename identifier. It keys the UserDefaults domain,
-	     the login item and ~/Library/Application Support/AirStat, so changing it to
-	     match the new name would orphan every existing user's settings. -->
 	<key>CFBundleIdentifier</key>
-	<string>com.airstat.AirStat</string>
+	<string>com.airstat.AirStats</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

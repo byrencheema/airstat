@@ -329,11 +329,16 @@ explicit `.accessibilityAction`.
 ## B9. Rename leftovers: the app calls itself "AirStat" in four user-visible places
 
 **Severity:** low, but it is on the launch surface
-**Status:** FIXED in `1e56b96`. The three strings now say AirStats. The bundle
-identifier was kept and `Info.plist` carries the comment this report asked for, saying
-why changing it would orphan every existing user's settings. `build.sh` names the
-resource bundle exactly instead of globbing, so a tree built under both names no longer
-ships both. The script's own header comment was the last leftover and is now fixed.
+**Status:** FIXED in `1e56b96`, then finished before the first release. The three
+strings say AirStats. `build.sh` names the resource bundle exactly instead of globbing,
+so a tree built under both names no longer ships both, and the script's own header
+comment is fixed.
+
+The bundle identifier was kept at first, on the reasoning below. That reasoning was
+about not stranding existing users, and there are none: the repo is private with no
+release. So the identifier, the settings directory and both window autosave names were
+all moved to AirStats while it is still free. Once a build is public this is closed
+for good, and the note in `CLAUDE.md` says so.
 
 | Location | Text |
 |---|---|
@@ -342,10 +347,10 @@ ships both. The script's own header comment was the last leftover and is now fix
 | `Sources/AirStats/DiagnosticsCLI.swift` | `--probe` header prints `AirStat metric probe` |
 | `Resources/Info.plist:10` | `CFBundleIdentifier` is `com.airstat.AirStat` |
 
-The bundle identifier is deliberate if it is being kept for continuity of
-`UserDefaults` and the settings directory (`~/Library/Application Support/AirStat`).
-Worth a comment in `Info.plist` saying so, otherwise someone will "fix" it and orphan
-every existing user's settings.
+The original reasoning, kept for the record: the bundle identifier is deliberate if it
+is being kept for continuity of `UserDefaults` and the settings directory
+(`~/Library/Application Support/AirStat`). Worth a comment in `Info.plist` saying so,
+otherwise someone will "fix" it and orphan every existing user's settings.
 
 Separately, `Scripts/build.sh:34` globs `"$BIN_DIR"/*_AirStatUI.bundle` and copies
 every match. A tree that has been built under both names ships both

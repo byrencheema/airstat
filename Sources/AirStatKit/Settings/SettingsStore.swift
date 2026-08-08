@@ -63,9 +63,7 @@ public final class SettingsStore {
     public nonisolated static var defaultDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        // Deliberately still "AirStat" after the rename, for the same reason the bundle
-        // identifier is: renaming it would strand every existing user's settings.
-        let dir = base.appendingPathComponent("AirStat", isDirectory: true)
+        let dir = base.appendingPathComponent("AirStats", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

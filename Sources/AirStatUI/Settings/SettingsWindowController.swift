@@ -85,7 +85,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.contentView = backdrop
 
         window.setContentSize(SettingsRootView.windowSize)
-        window.setFrameAutosaveName("AirStatSettingsWindow")
+        window.setFrameAutosaveName("AirStatsSettingsWindow")
         return window
     }
 

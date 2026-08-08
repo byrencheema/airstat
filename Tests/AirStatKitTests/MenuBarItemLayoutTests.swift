@@ -60,7 +60,7 @@ struct StatusItemControllerLayoutTests {
 
     @Test("the combined item keeps the autosave name it has always had")
     func combinedAutosaveNameIsUnchanged() {
-        #expect(StatusItemController.combinedAutosaveName == "AirStatStatusItem")
+        #expect(StatusItemController.combinedAutosaveName == "AirStatsStatusItem")
     }
 
     /// Positions are saved against these names, so two readouts must never share one

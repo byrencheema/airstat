@@ -17,10 +17,12 @@ Things that cost time to learn and are not visible in the code.
 - `swift build` reports success while linking stale objects. If an edit does not show
   up in the binary (`strings .build/debug/AirStats | grep '<removed text>'`), the
   incremental state is corrupt: `rm -rf .build`. Verify renders against a clean build.
-- The app is AirStats; the modules are still `AirStatKit` and `AirStatUI`, and the
-  bundle id, the settings directory and the window autosave names all still say
-  AirStat. That is deliberate — renaming any of them discards the user's settings,
-  their notification grant, or their saved window positions.
+- The app is AirStats, and so are the bundle id, the settings directory and the window
+  autosave names. They were aligned before the first release, which is the only moment
+  it is free: each one keys something the user owns, so changing any of them after
+  people are running it discards their settings, their notification grant or their
+  saved window positions. The modules are still `AirStatKit` and `AirStatUI`, which are
+  internal and key nothing.
 - SwiftPM emits AirStatUI's resources as `AirStats_AirStatUI.bundle` beside the binary,
   and `Bundle.module` looks for it inside `Contents/Resources`. `build.sh` copies it;
   a bundle assembled by hand without that step launches with no logo and no error.
