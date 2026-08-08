@@ -35,19 +35,33 @@ holds a binding across the reset that used to trap.
 | B5 keyboard shortcuts | fixed, needs a human key press | `145c109` |
 | B6 threshold notifications | fixed | `9aede13` |
 | B7 preview layout break | fixed | `4b96e2b` |
-| B8 sidebar press action | fixed, AX re-verify outstanding | `4b96e2b` |
+| B8 sidebar press action | fixed and verified 2026-08-08 | `4b96e2b` |
 | B9 rename leftovers | fixed | `1e56b96` |
 
-Two things this report asked for are still outstanding, both because they need a
-machine a person is sitting at:
+### Resolved on an unlocked machine, 2026-08-08
 
-- **B8's before/after accessibility capture** and **B10's retest**. The screen was
-  locked again when this was checked on 2026-08-06 (`CGSSessionScreenIsLocked = 1`),
-  so an accessibility read would have returned the same empty tree that produced B10
-  in the first place. Nothing was concluded from it. See B10 for the retest recipe.
+Both accessibility items are now closed. `CGSSessionScreenIsLocked = 0`, and nine
+control apps reported their windows in the same breath, so the tree can be trusted.
+
+- **B10 is closed, and was never real.** The installed app was launched clean and its
+  status item pressed through `AXPress` only, with no click and no activation. Before
+  the press AirStats published 0 windows; after it, 1 — while Ghostty, Finder, Safari,
+  Xcode, Chrome and four others each reported theirs. `NSApp.isActive` was `false`
+  throughout, which is the counterexample the original write-up could not obtain: an
+  inactive app that has never been made key does publish its panel. The empty tree was
+  the lock, exactly as suspected, and nothing belongs to `PanelController.swift`.
+- **B8 is verified fixed.** All six sidebar rows now answer `AXPress` where they
+  previously returned an empty action list, and pressing one does the thing it claims
+  to: pressing "Menu Bar" moved the window from `General` to `Menu Bar`. The panel's
+  new per-row gears came out well labelled in the same dump
+  (`AXMenuButton "CPU Usage menu bar options"`).
+
+One thing this report asked for is still outstanding, because no automation reaches it:
+
 - **B5's confirmation.** Synthesised key events do not trigger Carbon hot keys at all,
-  so `RegisterEventHotKey` succeeding is as far as automation reaches. The three
-  shortcuts need a real key press.
+  so `RegisterEventHotKey` succeeding is as far as automation reaches. As of
+  2026-08-08 no shortcut is recorded at all (`shortcuts.bindings` is empty), so the
+  test is: record one, then press it.
 
 The right-click context menu named under "Not covered" is unchanged and still needs a
 human click.
