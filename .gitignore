@@ -17,3 +17,6 @@ render/
 benchmark-report.html
 
 .DS_Store
+
+# Output of Scripts/release.sh.
+dist/
