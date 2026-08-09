@@ -83,4 +83,15 @@ xcrun stapler staple "$DMG"
 # what they would see instead of the app opening.
 spctl --assess --type open --context context:primary-signature -v "$DMG"
 
+# The cask in byrencheema/homebrew-tap pins a version and a checksum of this exact file,
+# and nothing above updates it. A release that ships without that bump leaves everyone
+# who installed with Homebrew on the previous version, with no signal that a newer one
+# exists, so the two values it needs are printed here rather than left to be recomputed
+# from memory later.
+SHA="$(shasum -a 256 "$DMG" | cut -d ' ' -f 1)"
+
 echo "$DMG (version $VERSION)"
+echo
+echo "Next: bump Casks/a/airstats.rb in byrencheema/homebrew-tap, then push the tag."
+echo "  version \"$VERSION\""
+echo "  sha256 \"$SHA\""
