@@ -5,8 +5,9 @@ disk, battery, temperature, process and host statistics from the kernel, then sh
 them in three places: the menu bar itself, a panel that drops down when you click the
 status item, and a floating overlay you can leave on your desktop.
 
-It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN, and
-opens no network connections.
+It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN. The
+only thing in it that opens a network connection is the public IP lookup, which ships
+off.
 
 ![The status item](docs/menubar-real.png)
 
@@ -46,6 +47,18 @@ against an independent kernel source (`vm_stat`, `sysctl`, `netstat -ib`, `ioreg
 
 `vm_stat`, `sysctl`, `netstat -ib`, `ioreg` and `pmset` each get their own note in the
 [blog][blog], along with why a GPU can read 98% idle and still be busy.
+
+Do not take the table on faith. `Scripts/benchmark.py` runs the measurement behind it:
+
+```sh
+uv run Scripts/benchmark.py --samples 160
+```
+
+It samples every monitor running on your Mac through a single `top` invocation per
+interval, so they share one measuring window, and discards `top`'s first sample because
+it reports CPU since launch rather than over the interval. Your figures will not be
+these figures, since they depend on the machine and on what else it is doing. The
+ranking is the part that should reproduce.
 
 [benchmark]: https://airstat-site.vercel.app/blog/airstat-vs-stats-vs-istat-menus
 [blog]: https://airstat-site.vercel.app/blog
@@ -102,6 +115,7 @@ for a second during spin-down.
 | `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
 | `Scripts/release.sh` | Signs, notarizes and packages the `.dmg` that ships. |
+| `Scripts/benchmark.py` | Samples the menu bar monitors on your Mac over one shared window. |
 
 `AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
 run in a windowless process.
