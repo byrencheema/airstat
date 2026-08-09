@@ -14,9 +14,15 @@ opens no network connections.
 
 ## Install
 
-[**Download AirStats**](https://github.com/byrencheema/airstat/releases/latest/download/AirStats.dmg)
-, open it, and drag the app to Applications. It is signed and notarized, so it opens
-with no warning.
+[**Download AirStats**](https://github.com/byrencheema/airstat/releases/latest/download/AirStats.dmg),
+open it, and drag the app to Applications. It is signed and notarized, so it opens with
+no warning.
+
+Or with Homebrew:
+
+```sh
+brew install --cask byrencheema/tap/airstats
+```
 
 Building from source is below if you would rather.
 
