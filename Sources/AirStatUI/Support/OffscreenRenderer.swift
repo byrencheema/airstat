@@ -92,13 +92,13 @@ public enum OffscreenRenderer {
             return renderMenuBar(request, appearance: appearance)
         case .panel:
             return renderHosted(PanelPreviewHost(request: request), appearance: appearance,
-                                width: PanelSettings.width)
+                                width: PanelSettings.width, scale: request.scale)
         case .overlay:
             return renderHosted(OverlayPreviewHost(request: request), appearance: appearance,
-                                width: request.settings.overlay.width)
+                                width: request.settings.overlay.width, scale: request.scale)
         case .settings:
             return renderHosted(SettingsPreviewHost(request: request), appearance: appearance,
-                                width: 620)
+                                width: 620, scale: request.scale)
         }
     }
 
@@ -119,7 +119,7 @@ public enum OffscreenRenderer {
         view.frame = NSRect(origin: .zero, size: size)
         view.layoutSubtreeIfNeeded()
 
-        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        guard let rep = scaledRep(size: size, scale: request.scale) else { return nil }
         view.cacheDisplay(in: view.bounds, to: rep)
 
         // Composite onto the menu bar's own backdrop so contrast can be judged
@@ -132,17 +132,7 @@ public enum OffscreenRenderer {
             ? NSColor(calibratedWhite: 0.13, alpha: 1)
             : NSColor(calibratedWhite: 0.96, alpha: 1)
 
-        guard let canvas = NSBitmapImageRep(bitmapDataPlanes: nil,
-                                            pixelsWide: Int(size.width),
-                                            pixelsHigh: Int(size.height),
-                                            bitsPerSample: 8,
-                                            samplesPerPixel: 4,
-                                            hasAlpha: true,
-                                            isPlanar: false,
-                                            colorSpaceName: .deviceRGB,
-                                            bytesPerRow: 0,
-                                            bitsPerPixel: 0) else { return nil }
-        canvas.size = size
+        guard let canvas = scaledRep(size: size, scale: request.scale) else { return nil }
 
         NSGraphicsContext.saveGraphicsState()
         let context = NSGraphicsContext(bitmapImageRep: canvas)
@@ -171,7 +161,8 @@ public enum OffscreenRenderer {
 
     private static func renderHosted<Content: View>(_ content: Content,
                                                     appearance: NSAppearance,
-                                                    width: CGFloat) -> NSImage? {
+                                                    width: CGFloat,
+                                                    scale: CGFloat) -> NSImage? {
         let hosting = NSHostingView(rootView: content)
         hosting.appearance = appearance
         let fitting = hosting.fittingSize
@@ -180,11 +171,35 @@ public enum OffscreenRenderer {
         hosting.frame = NSRect(origin: .zero, size: size)
         hosting.layoutSubtreeIfNeeded()
 
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
+        guard let rep = scaledRep(size: size, scale: scale) else { return nil }
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         let image = NSImage(size: size)
         image.addRepresentation(rep)
         return image
+    }
+
+    /// A representation whose pixel count is `scale` times its point size, which is what
+    /// makes a view redraw at that scale instead of being resampled afterwards.
+    ///
+    /// `bitmapImageRepForCachingDisplay(in:)` was used here and always answered a 1x
+    /// representation, because the backing scale it reads comes from the view's window
+    /// and this process has none. Every surface was therefore drawn once at 1x and
+    /// stretched by `pngData`, so `--scale 2` and above produced a blurred copy rather
+    /// than a sharper render, and the 1x-versus-2x comparison the flag exists for
+    /// compared an image against an interpolation of itself.
+    private static func scaledRep(size: NSSize, scale: CGFloat) -> NSBitmapImageRep? {
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                   pixelsWide: Int((size.width * scale).rounded()),
+                                   pixelsHigh: Int((size.height * scale).rounded()),
+                                   bitsPerSample: 8,
+                                   samplesPerPixel: 4,
+                                   hasAlpha: true,
+                                   isPlanar: false,
+                                   colorSpaceName: .deviceRGB,
+                                   bytesPerRow: 0,
+                                   bitsPerPixel: 0)
+        rep?.size = size
+        return rep
     }
 
     /// Writes at the requested backing scale so 1x and 2x rendering can be compared —

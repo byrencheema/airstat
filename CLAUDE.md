@@ -43,6 +43,14 @@ Things that cost time to learn and are not visible in the code.
 
 ## Verification
 
+- `--render --scale N` only became a real render in August 2026. Before that every
+  surface was drawn once at 1x and stretched to size, because the rep came from
+  `bitmapImageRepForCachingDisplay`, which reads its backing scale from the view's
+  window and this process has none. So `@2x.png` was an interpolation of `@1x.png`, the
+  1x-versus-2x comparison compared an image against a blur of itself, and asking for a
+  bigger scale produced a bigger blur rather than more detail. Any image rendered before
+  that fix is soft no matter its pixel count. The tell is that mean absolute horizontal
+  gradient roughly halves per doubling of scale; on a true render it holds up.
 - `AirStats --render <surface>` writes PNGs offscreen from fixtures. It shows layout
   and SwiftUI drawing only: `NSVisualEffectView` renders nothing offscreen, so
   materials and translucency cannot be judged there. `OffscreenRenderer` substitutes
