@@ -15,7 +15,7 @@ off.
 
 ## Install
 
-[**Download AirStats**](https://github.com/byrencheema/airstat/releases/latest/download/AirStats.dmg),
+[**Download AirStats**](https://github.com/byrencheema/airstats/releases/latest/download/AirStats.dmg),
 open it, and drag the app to Applications. It is signed and notarized, so it opens with
 no warning.
 
