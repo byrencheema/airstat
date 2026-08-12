@@ -9,7 +9,7 @@
     uv run Scripts/benchmark.py --group Foo=Foo,Bar  # measure some other app
 
 This reproduces the method behind the numbers in the comparison write-up at
-https://airstat-site.vercel.app/blog/airstat-vs-stats-vs-istat-menus. It is not the
+https://airstats.app/blog/airstat-vs-stats-vs-istat-menus. It is not the
 transcript of that run: it will report what the apps on *your* Mac cost right now, and
 those figures will differ from the published ones because they depend on the hardware,
 the macOS version and what else the machine is doing. Reproducing the ranking is the

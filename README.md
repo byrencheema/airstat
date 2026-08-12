@@ -60,8 +60,8 @@ it reports CPU since launch rather than over the interval. Your figures will not
 these figures, since they depend on the machine and on what else it is doing. The
 ranking is the part that should reproduce.
 
-[benchmark]: https://airstat-site.vercel.app/blog/airstat-vs-stats-vs-istat-menus
-[blog]: https://airstat-site.vercel.app/blog
+[benchmark]: https://airstats.app/blog/airstat-vs-stats-vs-istat-menus
+[blog]: https://airstats.app/blog
 
 ## Requirements
 
