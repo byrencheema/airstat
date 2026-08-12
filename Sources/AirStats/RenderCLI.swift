@@ -12,6 +12,7 @@ enum RenderCLI {
         var scales: [CGFloat] = []
         var appearances: [Bool] = []
         var outputDirectory = URL(fileURLWithPath: "render", isDirectory: true)
+        var settings = AirStatKit.Settings()
 
         var index = 0
         while index < arguments.count {
@@ -26,6 +27,16 @@ enum RenderCLI {
                 if let value = Double(arguments[safe: index] ?? "") { scales.append(CGFloat(value)) }
             case "--light": appearances.append(false)
             case "--dark": appearances.append(true)
+            // The colour a user picks is already carried on Request.settings and read
+            // by MenuBarRenderModel and the overlay; only a way to say so was missing.
+            // The panel ignores it on purpose, it is monochrome by design.
+            case "--tint":
+                index += 1
+                guard let color = themeColor(from: arguments[safe: index] ?? "") else {
+                    FileHandle.standardError.write(Data("--tint wants #RRGGBB or r,g,b in 0...1\n".utf8))
+                    exit(2)
+                }
+                settings.theme.setAllColors(color)
             case "--scenario":
                 index += 1
                 if let scenario = OffscreenRenderer.Scenario(rawValue: arguments[safe: index] ?? "") {
@@ -64,7 +75,7 @@ enum RenderCLI {
                         for scale in scales {
                             let request = OffscreenRenderer.Request(
                                 surface: surface, scenario: scenario,
-                                isDark: isDark, scale: scale)
+                                isDark: isDark, scale: scale, settings: settings)
                             do {
                                 let url = try OffscreenRenderer.render(request, to: outputDirectory)
                                 print(url.path)
@@ -83,6 +94,24 @@ enum RenderCLI {
             if !failures.isEmpty { exit(1) }
         }
     }
+}
+
+/// Accepts `#4C8DFF`, `4C8DFF` or `0.3,0.55,1`, so a colour can be pasted from either
+/// a design tool or the settings file without conversion.
+private func themeColor(from text: String) -> ThemeColor? {
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+
+    if trimmed.contains(",") {
+        let parts = trimmed.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 3 else { return nil }
+        return ThemeColor(red: parts[0], green: parts[1], blue: parts[2])
+    }
+
+    let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+    guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return nil }
+    return ThemeColor(red: Double((value >> 16) & 0xFF) / 255,
+                      green: Double((value >> 8) & 0xFF) / 255,
+                      blue: Double(value & 0xFF) / 255)
 }
 
 private extension Array {
