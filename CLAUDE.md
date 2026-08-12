@@ -31,6 +31,15 @@ Things that cost time to learn and are not visible in the code.
   and `Sources/AirStatUI/Resources/Logo.png` is a black-on-transparent template AppKit
   re-tints per appearance. Neither can stand in for the other.
   `Resources/logo-source.png` is the master art to redraw either from.
+- The `.dmg` window layout lives in the image's own `.DS_Store`, written by `dmgbuild`
+  from `Scripts/dmg.py`. `hdiutil create -srcfolder` alone produces a working image that
+  Finder opens as a plain list of two names, with nothing telling anyone to drag.
+  `dmgbuild` writes that file directly instead of scripting Finder, which is what lets
+  the release run with no Automation grant and no window on screen. The icon centres in
+  `Scripts/dmg.py` and the arrow in `Scripts/dmg-background.py` are two halves of one
+  picture: move either and re-run `uv run --with pillow Scripts/dmg-background.py`.
+  Verify a built image by reading its `.DS_Store` with `ds_store`, since the window
+  cannot be screenshotted here.
 
 ## Verification
 

@@ -13,6 +13,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+ROOT="$PWD"
 
 IDENTITY="${SIGN_IDENTITY:-Developer ID Application}"
 PROFILE="${NOTARY_PROFILE:-AirStats}"
@@ -67,13 +68,17 @@ xcrun stapler staple "$APP"
 rm -f "$ZIP"
 
 # A .dmg opens as a window holding the app next to a shortcut to /Applications, so
-# installing is one drag. hdiutil builds it from a staging directory.
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
-cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-
-hdiutil create -volname "AirStats" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+# installing is one drag. `hdiutil create -srcfolder` makes that image but records no
+# window settings, so Finder opens it as a plain list of two names and nothing tells
+# the user to drag. dmgbuild writes the layout in Scripts/dmg.py into the image's
+# .DS_Store itself, rather than by scripting Finder, so this needs no Automation grant
+# and no window on screen. Icon positions there line up with the arrow drawn by
+# Scripts/dmg-background.py.
+uv run --with dmgbuild dmgbuild \
+  -s "$ROOT/Scripts/dmg.py" \
+  -D app="$APP" \
+  -D root="$ROOT" \
+  "AirStats" "$DMG" >/dev/null
 
 codesign --force --timestamp --sign "$IDENTITY" "$DMG"
 xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
