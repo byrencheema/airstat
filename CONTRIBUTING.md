@@ -9,7 +9,7 @@ You need macOS 14 or later and the Swift 6 toolchain that ships with Xcode 16.
 
 ```sh
 git clone <your fork>
-cd airstat
+cd airstats
 swift build
 swift test
 Scripts/build.sh          # debug .app bundle
