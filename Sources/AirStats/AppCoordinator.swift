@@ -18,6 +18,7 @@ final class AppCoordinator {
     private let thresholdMonitor: ThresholdMonitor
     private let hotKeys: GlobalHotKeyCenter
     private let updates: UpdateChecker
+    private let updateNotifier: UpdateNotifier
 
     private var observers: [any NSObjectProtocol] = []
     /// Where the panel is currently hung. Kept here because with one status item per
@@ -29,6 +30,9 @@ final class AppCoordinator {
         let store = SettingsStore()
         let engine = MetricsEngine(settingsStore: store)
         let updates = UpdateChecker(settings: store)
+        // One grant and one delegate slot shared by both things that post, so the user
+        // sees at most one permission prompt whichever feature needs it first.
+        let authority = NotificationAuthority()
         self.settingsStore = store
         self.engine = engine
         self.updates = updates
@@ -36,7 +40,8 @@ final class AppCoordinator {
         self.panel = PanelController(engine: engine, settings: store)
         self.overlay = OverlayController(engine: engine, settings: store)
         self.settingsWindow = SettingsWindowController(engine: engine, settings: store, updates: updates)
-        self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store)
+        self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store, authority: authority)
+        self.updateNotifier = UpdateNotifier(updates: updates, settings: store, authority: authority)
         self.hotKeys = GlobalHotKeyCenter(settings: store)
     }
 
@@ -78,6 +83,7 @@ final class AppCoordinator {
         // Arms a delayed check rather than making one: launch is the moment the app is
         // least entitled to the network, and nothing about this feature is urgent.
         updates.start()
+        updateNotifier.start()
         overlay.syncWithSettings()
 
         registerSystemObservers()
@@ -98,6 +104,7 @@ final class AppCoordinator {
             NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
+        updateNotifier.stop()
         updates.stop()
         hotKeys.stop()
         thresholdMonitor.stop()

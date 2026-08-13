@@ -11,12 +11,10 @@ public final class ThresholdMonitor {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
+    private let authority: NotificationAuthority
 
     private var observationTask: Task<Void, Never>?
-    private var authorizationTask: Task<Void, Never>?
     private var evaluator = ThresholdEvaluator()
-    private var authorization: Authorization = .undetermined
-    private var presenter: ForegroundPresenter?
 
     /// True while the observation loop and any pending authorisation request are
     /// installed.
@@ -25,21 +23,17 @@ public final class ThresholdMonitor {
     /// task or a delegate that outlives `stop()` is silent, and nothing looks wrong
     /// until the app is posting notifications on behalf of a shut-down monitor.
     public var isRunning: Bool {
-        observationTask != nil || authorizationTask != nil || presenter != nil
+        observationTask != nil || authority.isRunning
     }
 
-    private enum Authorization {
-        case undetermined
-        case requesting
-        case granted
-        /// Refused by the user, or impossible because the process is not running from
-        /// an app bundle. Both are final for this launch, so nothing asks again.
-        case unavailable
-    }
-
-    public init(engine: MetricsEngine, settings: SettingsStore) {
+    /// The authority is injected rather than defaulted because it is shared with
+    /// `UpdateNotifier`: a default would quietly give each of them their own, which is
+    /// two permission prompts and a fight over the delegate slot.
+    public init(engine: MetricsEngine, settings: SettingsStore,
+                authority: NotificationAuthority) {
         self.engine = engine
         self.settings = settings
+        self.authority = authority
     }
 
     // MARK: Lifecycle
@@ -64,19 +58,8 @@ public final class ThresholdMonitor {
     public func stop() {
         observationTask?.cancel()
         observationTask = nil
-        authorizationTask?.cancel()
-        authorizationTask = nil
-        if let presenter {
-            // The delegate is a process-wide slot on a shared singleton, so this clears
-            // it only while it still holds *our* presenter. Nothing else in the app
-            // wants that slot today, and a teardown that silently unhooks whoever does
-            // want it next is the kind of thing nobody finds for months.
-            let center = UNUserNotificationCenter.current()
-            if center.delegate === presenter { center.delegate = nil }
-            self.presenter = nil
-        }
         evaluator.reset()
-        authorization = .undetermined
+        authority.reset()
     }
 
     // MARK: Evaluation
@@ -89,10 +72,11 @@ public final class ThresholdMonitor {
         }
         // Nothing is measured until there is somewhere to send the answer. Denial is
         // terminal, so a refused prompt costs one check per sample and no more.
-        guard authorization == .granted else {
-            requestAuthorizationIfNeeded()
-            return
-        }
+        //
+        // Asked here, the first time the user actually switches notifications on, and
+        // never at launch. A menu bar utility that demands permission on first run is
+        // asking for something the user has not opted into yet.
+        guard authority.request("threshold alerts") else { return }
 
         // A rule for a metric this Mac cannot measure could never fire honestly, and
         // the pane already tells the user so.
@@ -105,73 +89,15 @@ public final class ThresholdMonitor {
         for alert in alerts { deliver(alert) }
     }
 
-    // MARK: Authorisation
-
-    /// Asks the first time the user actually switches notifications on, never at
-    /// launch. A menu bar utility that demands permission on first run is asking for
-    /// something the user has not opted into yet.
-    private func requestAuthorizationIfNeeded() {
-        guard authorization == .undetermined else { return }
-        guard Bundle.main.bundleIdentifier != nil else {
-            // `UNUserNotificationCenter.current()` traps outside an app bundle, which
-            // is how the render and probe CLIs run out of `.build`.
-            authorization = .unavailable
-            return
-        }
-
-        authorization = .requesting
-        let center = UNUserNotificationCenter.current()
-        authorizationTask = Task { @MainActor [weak self] in
-            var granted = false
-            do {
-                granted = try await center.requestAuthorization(options: [.alert, .sound])
-            } catch {
-                // The failure mode of this whole feature is silence, so the one thing
-                // that must never be swallowed is why nothing is arriving.
-                WindowLog.log("notification authorisation failed: \(error)")
-            }
-            guard let self, !Task.isCancelled, self.authorization == .requesting else { return }
-            self.authorizationTask = nil
-            self.authorization = granted ? .granted : .unavailable
-            if granted {
-                let presenter = ForegroundPresenter()
-                center.delegate = presenter
-                self.presenter = presenter
-            }
-            WindowLog.log("notification authorisation \(granted ? "granted" : "refused")")
-        }
-    }
-
     // MARK: Delivery
 
     private func deliver(_ alert: ThresholdAlert) {
-        let content = UNMutableNotificationContent()
-        content.title = alert.title
-        content.body = alert.body
-        content.sound = .default
-
         // One identifier per rule, so a rule that fires again after its cooldown
         // replaces its own stale banner instead of stacking a column of the same
         // warning in Notification Centre.
-        let request = UNNotificationRequest(identifier: "threshold.\(alert.ruleID.uuidString)",
-                                            content: content,
-                                            trigger: nil)
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error {
-                WindowLog.log("notification delivery failed: \(error.localizedDescription)")
-            }
-        }
+        authority.post(identifier: "threshold.\(alert.ruleID.uuidString)",
+                       title: alert.title,
+                       body: alert.body)
         WindowLog.log("notification posted metric=\(alert.metric.rawValue) value=\(alert.value) threshold=\(alert.threshold)")
-    }
-}
-
-/// macOS suppresses banners for the app that is currently frontmost. AirStats is
-/// frontmost whenever its settings window has focus, which is exactly where a user
-/// goes to set these rules up, so present them anyway.
-private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDelegate {
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound])
     }
 }

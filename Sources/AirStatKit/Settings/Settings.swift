@@ -740,6 +740,13 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     /// macOS version once a week and can do nothing but put a line in the About pane,
     /// and a user who is never told a release exists is the one being poorly served.
     public var checksForUpdates: Bool
+    /// Post a notification when a check finds a release, rather than waiting for the
+    /// user to open About.
+    ///
+    /// Separate from `checksForUpdates` because they fail in opposite directions: a
+    /// user who does not want to be interrupted still wants the About row to be true,
+    /// and turning the check off to stop a banner would cost them both.
+    public var notifiesAboutUpdates: Bool
     public var showsDockIcon: Bool
 
     public init(updateInterval: TimeInterval = 2,
@@ -753,6 +760,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
                 pausesOnLowPower: Bool = false,
                 fetchesPublicIP: Bool = false,
                 checksForUpdates: Bool = true,
+                notifiesAboutUpdates: Bool = true,
                 showsDockIcon: Bool = false) {
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
@@ -765,6 +773,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         self.pausesOnLowPower = pausesOnLowPower
         self.fetchesPublicIP = fetchesPublicIP
         self.checksForUpdates = checksForUpdates
+        self.notifiesAboutUpdates = notifiesAboutUpdates
         self.showsDockIcon = showsDockIcon
     }
 
@@ -773,7 +782,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case updateInterval, launchAtLogin, appearance, temperatureUnit, networkRateUnit
         case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower
-        case fetchesPublicIP, checksForUpdates, showsDockIcon
+        case fetchesPublicIP, checksForUpdates, notifiesAboutUpdates, showsDockIcon
     }
 
     public init(from decoder: Decoder) throws {
@@ -789,6 +798,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         pausesOnLowPower = c.value(.pausesOnLowPower, or: false)
         fetchesPublicIP = c.value(.fetchesPublicIP, or: false)
         checksForUpdates = c.value(.checksForUpdates, or: true)
+        notifiesAboutUpdates = c.value(.notifiesAboutUpdates, or: true)
         showsDockIcon = c.value(.showsDockIcon, or: false)
     }
 }
@@ -810,20 +820,32 @@ public struct UpdateSettings: Sendable, Codable, Equatable {
     /// running one. `UpdateChecker.availableRelease` is what decides that.
     public var latestVersion: String?
     public var latestURL: URL?
+    /// The version a notification has already been posted for.
+    ///
+    /// This is the difference between telling someone once and telling them every
+    /// seven days until they give in. It is stored rather than held in memory because
+    /// the check that finds a release and the launch that would announce it again are
+    /// usually different launches.
+    public var notifiedVersion: String?
 
-    public init(lastCheckedAt: Date? = nil, latestVersion: String? = nil, latestURL: URL? = nil) {
+    public init(lastCheckedAt: Date? = nil, latestVersion: String? = nil, latestURL: URL? = nil,
+                notifiedVersion: String? = nil) {
         self.lastCheckedAt = lastCheckedAt
         self.latestVersion = latestVersion
         self.latestURL = latestURL
+        self.notifiedVersion = notifiedVersion
     }
 
-    private enum CodingKeys: String, CodingKey { case lastCheckedAt, latestVersion, latestURL }
+    private enum CodingKeys: String, CodingKey {
+        case lastCheckedAt, latestVersion, latestURL, notifiedVersion
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         lastCheckedAt = try? c.decodeIfPresent(Date.self, forKey: .lastCheckedAt)
         latestVersion = try? c.decodeIfPresent(String.self, forKey: .latestVersion)
         latestURL = try? c.decodeIfPresent(URL.self, forKey: .latestURL)
+        notifiedVersion = try? c.decodeIfPresent(String.self, forKey: .notifiedVersion)
     }
 }
 
