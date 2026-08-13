@@ -58,8 +58,16 @@ struct GeneralPane: View {
                        isOn: settings.binding(\.general.showsDockIcon, onChange: applyDockIcon))
                 Toggle("Look up my public IP address",
                        isOn: settings.binding(\.general.fetchesPublicIP))
+                Toggle("Check for updates automatically",
+                       isOn: settings.binding(\.general.checksForUpdates))
             } header: {
                 Text("Startup & Privacy")
+            } footer: {
+                Text("The update check asks airstats.app once a week whether a newer "
+                     + "version exists, and sends the version you are running and your "
+                     + "macOS version so the answer fits this Mac. Nothing is ever "
+                     + "downloaded or installed; About is where a new version is "
+                     + "mentioned.")
             }
 
             Section {

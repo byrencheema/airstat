@@ -17,6 +17,7 @@ final class AppCoordinator {
     private let settingsWindow: SettingsWindowController
     private let thresholdMonitor: ThresholdMonitor
     private let hotKeys: GlobalHotKeyCenter
+    private let updates: UpdateChecker
 
     private var observers: [any NSObjectProtocol] = []
     /// Where the panel is currently hung. Kept here because with one status item per
@@ -27,12 +28,14 @@ final class AppCoordinator {
     init() {
         let store = SettingsStore()
         let engine = MetricsEngine(settingsStore: store)
+        let updates = UpdateChecker(settings: store)
         self.settingsStore = store
         self.engine = engine
+        self.updates = updates
         self.statusItem = StatusItemController(engine: engine, settings: store)
         self.panel = PanelController(engine: engine, settings: store)
         self.overlay = OverlayController(engine: engine, settings: store)
-        self.settingsWindow = SettingsWindowController(engine: engine, settings: store)
+        self.settingsWindow = SettingsWindowController(engine: engine, settings: store, updates: updates)
         self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store)
         self.hotKeys = GlobalHotKeyCenter(settings: store)
     }
@@ -72,6 +75,9 @@ final class AppCoordinator {
         engine.start()
         thresholdMonitor.start()
         hotKeys.start()
+        // Arms a delayed check rather than making one: launch is the moment the app is
+        // least entitled to the network, and nothing about this feature is urgent.
+        updates.start()
         overlay.syncWithSettings()
 
         registerSystemObservers()
@@ -85,6 +91,7 @@ final class AppCoordinator {
             NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
+        updates.stop()
         hotKeys.stop()
         thresholdMonitor.stop()
         engine.stop()

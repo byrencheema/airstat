@@ -6,10 +6,20 @@ import AirStatKit
 struct AboutPane: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
+    /// Absent in the offscreen renderer, which has no running app to check on behalf
+    /// of. The notice below is drawn from stored settings either way; only the button
+    /// needs a checker to press.
+    var updates: UpdateChecker?
 
     @State private var transferResult: String?
     @State private var transferFailed = false
     @State private var isConfirmingFullReset = false
+    /// Whether the user pressed Check Now in this window.
+    ///
+    /// "Up to date" and "could not reach the service" are answers to a question the
+    /// user asked, and noise otherwise: the automatic check is meant to be invisible
+    /// unless it finds something, so its result is not reported here.
+    @State private var hasCheckedManually = false
 
     /// Live identity when the app is running; the render harness has no engine, so
     /// it shows the same fixture machine every other rendered surface shows.
@@ -36,6 +46,43 @@ struct AboutPane: View {
                 .padding(.vertical, Design.Space.xs)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("AirStats, \(versionText)")
+            }
+
+            Section {
+                if let release = availableRelease {
+                    VStack(alignment: .leading, spacing: Design.Space.xs) {
+                        HStack(spacing: Design.Space.s) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(Design.Palette.accent)
+                            Text("AirStats \(release.version) is available.")
+                        }
+                        // Not folded into one accessibility element with the line above
+                        // it: combining children replaces the link with a description of
+                        // one, and the whole point of the row is that it can be opened.
+                        Link("Open the download page", destination: release.url)
+                            .font(.callout)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                HStack(spacing: Design.Space.l) {
+                    Button("Check Now") { checkForUpdates() }
+                        .disabled(updates == nil || isChecking)
+                        .accessibilityHint("Asks airstats.app whether a newer version exists")
+                    if isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Checking for updates")
+                    }
+                    Spacer()
+                }
+                if let caution = manualCaution {
+                    SettingsCaution(caution)
+                } else if let note = manualNote {
+                    SettingsFootnote(note)
+                }
+            } header: {
+                Text("Updates")
             }
 
             Section {
@@ -117,6 +164,32 @@ struct AboutPane: View {
         }
         let build = info?["CFBundleVersion"] as? String
         return build.map { "Version \(short) (\($0))" } ?? "Version \(short)"
+    }
+
+    // MARK: Updates
+
+    /// Read from stored settings rather than from the checker's status, so the notice
+    /// is here on the next launch too: a release is worth mentioning until it is
+    /// installed, not for the ten minutes after it was found.
+    private var availableRelease: UpdateRelease? {
+        updates?.availableRelease ?? UpdateChecker.availableRelease(in: settings.settings)
+    }
+
+    private var isChecking: Bool { updates?.isChecking ?? false }
+
+    private var manualNote: String? {
+        guard hasCheckedManually, updates?.status == .upToDate else { return nil }
+        return "AirStats is up to date."
+    }
+
+    private var manualCaution: String? {
+        guard hasCheckedManually, case .unavailable(let message)? = updates?.status else { return nil }
+        return message
+    }
+
+    private func checkForUpdates() {
+        hasCheckedManually = true
+        updates?.checkNow()
     }
 
     private func coreText(_ system: SystemInfoSnapshot) -> String {

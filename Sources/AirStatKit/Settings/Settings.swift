@@ -731,8 +731,15 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public var throttlesWhenOccluded: Bool
     /// Suspend sampling entirely while on battery below a threshold.
     public var pausesOnLowPower: Bool
-    /// Fetch the public IP address (the only feature that leaves the machine).
+    /// Fetch the public IP address. One of the two features that leave the machine,
+    /// the other being the update check below.
     public var fetchesPublicIP: Bool
+    /// Ask airstats.app whether there is a newer release, at most weekly.
+    ///
+    /// The only network setting that ships on. It sends the running version and the
+    /// macOS version once a week and can do nothing but put a line in the About pane,
+    /// and a user who is never told a release exists is the one being poorly served.
+    public var checksForUpdates: Bool
     public var showsDockIcon: Bool
 
     public init(updateInterval: TimeInterval = 2,
@@ -745,6 +752,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
                 throttlesWhenOccluded: Bool = true,
                 pausesOnLowPower: Bool = false,
                 fetchesPublicIP: Bool = false,
+                checksForUpdates: Bool = true,
                 showsDockIcon: Bool = false) {
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
@@ -756,6 +764,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         self.throttlesWhenOccluded = throttlesWhenOccluded
         self.pausesOnLowPower = pausesOnLowPower
         self.fetchesPublicIP = fetchesPublicIP
+        self.checksForUpdates = checksForUpdates
         self.showsDockIcon = showsDockIcon
     }
 
@@ -764,7 +773,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case updateInterval, launchAtLogin, appearance, temperatureUnit, networkRateUnit
         case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower
-        case fetchesPublicIP, showsDockIcon
+        case fetchesPublicIP, checksForUpdates, showsDockIcon
     }
 
     public init(from decoder: Decoder) throws {
@@ -779,7 +788,42 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         throttlesWhenOccluded = c.value(.throttlesWhenOccluded, or: true)
         pausesOnLowPower = c.value(.pausesOnLowPower, or: false)
         fetchesPublicIP = c.value(.fetchesPublicIP, or: false)
+        checksForUpdates = c.value(.checksForUpdates, or: true)
         showsDockIcon = c.value(.showsDockIcon, or: false)
+    }
+}
+
+// MARK: - Updates
+
+/// What the update check remembers between runs.
+///
+/// Bookkeeping rather than preference — the switch that governs it is
+/// `general.checksForUpdates`, so that a pane's Restore Defaults restores the setting
+/// the user can see without also clearing the record of when we last asked and
+/// earning the endpoint an extra request for it.
+public struct UpdateSettings: Sendable, Codable, Equatable {
+    /// When the last check was *attempted*. Timed from the attempt rather than the
+    /// answer so a service that is missing or hanging cannot be asked again sooner
+    /// than one that answered.
+    public var lastCheckedAt: Date?
+    /// The newest version the service has named, whether or not it is newer than the
+    /// running one. `UpdateChecker.availableRelease` is what decides that.
+    public var latestVersion: String?
+    public var latestURL: URL?
+
+    public init(lastCheckedAt: Date? = nil, latestVersion: String? = nil, latestURL: URL? = nil) {
+        self.lastCheckedAt = lastCheckedAt
+        self.latestVersion = latestVersion
+        self.latestURL = latestURL
+    }
+
+    private enum CodingKeys: String, CodingKey { case lastCheckedAt, latestVersion, latestURL }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lastCheckedAt = try? c.decodeIfPresent(Date.self, forKey: .lastCheckedAt)
+        latestVersion = try? c.decodeIfPresent(String.self, forKey: .latestVersion)
+        latestURL = try? c.decodeIfPresent(URL.self, forKey: .latestURL)
     }
 }
 
@@ -887,6 +931,7 @@ public struct Settings: Sendable, Codable, Equatable {
     public var notifications: NotificationSettings
     public var shortcuts: ShortcutSettings
     public var theme: ThemeSettings
+    public var updates: UpdateSettings
 
     public static let currentSchemaVersion = 1
 
@@ -898,7 +943,8 @@ public struct Settings: Sendable, Codable, Equatable {
                 overlay: OverlaySettings = .init(),
                 notifications: NotificationSettings = .init(),
                 shortcuts: ShortcutSettings = .init(),
-                theme: ThemeSettings = .init()) {
+                theme: ThemeSettings = .init(),
+                updates: UpdateSettings = .init()) {
         self.schemaVersion = schemaVersion
         self.general = general
         self.menuBar = menuBar
@@ -908,11 +954,12 @@ public struct Settings: Sendable, Codable, Equatable {
         self.notifications = notifications
         self.shortcuts = shortcuts
         self.theme = theme
+        self.updates = updates
     }
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, general, menuBar, panel, charts, overlay, notifications
-        case shortcuts, theme
+        case shortcuts, theme, updates
     }
 
     public init(from decoder: Decoder) throws {
@@ -926,6 +973,7 @@ public struct Settings: Sendable, Codable, Equatable {
         notifications = c.value(.notifications, or: NotificationSettings())
         shortcuts = c.value(.shortcuts, or: ShortcutSettings())
         theme = c.value(.theme, or: ThemeSettings())
+        updates = c.value(.updates, or: UpdateSettings())
     }
 
     /// Collectors that must run to satisfy everything currently on screen.

@@ -8,11 +8,13 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
+    private let updates: UpdateChecker?
     private var window: NSWindow?
 
-    public init(engine: MetricsEngine, settings: SettingsStore) {
+    public init(engine: MetricsEngine, settings: SettingsStore, updates: UpdateChecker? = nil) {
         self.engine = engine
         self.settings = settings
+        self.updates = updates
         super.init()
     }
 
@@ -45,7 +47,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow()
-        let root = SettingsRootView(settings: settings, engine: engine) { [weak window] tab in
+        let root = SettingsRootView(settings: settings, engine: engine,
+                                    updates: updates) { [weak window] tab in
             window?.title = tab.label
         }
         window.delegate = self
@@ -104,6 +107,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 struct SettingsRootView: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
+    /// Nil in the offscreen renderer, which has no app lifecycle to hang a check on.
+    let updates: UpdateChecker?
     /// Lets the window title follow the selected pane, which is what System
     /// Settings does and what `navigationTitle` used to give us for free.
     var onPaneChange: ((SettingsTab) -> Void)?
@@ -122,10 +127,11 @@ struct SettingsRootView: View {
     /// a form row sliding behind three buttons is worse than a band of plain glass.
     private static let titlebarInset: CGFloat = 28
 
-    init(settings: SettingsStore, engine: MetricsEngine? = nil, initialTab: SettingsTab? = nil,
-         onPaneChange: ((SettingsTab) -> Void)? = nil) {
+    init(settings: SettingsStore, engine: MetricsEngine? = nil, updates: UpdateChecker? = nil,
+         initialTab: SettingsTab? = nil, onPaneChange: ((SettingsTab) -> Void)? = nil) {
         self.settings = settings
         self.engine = engine
+        self.updates = updates
         self.onPaneChange = onPaneChange
         _tab = State(initialValue: initialTab ?? SettingsTab.renderDefault)
     }
@@ -259,7 +265,7 @@ struct SettingsRootView: View {
         case .appearance: AppearancePane(settings: settings)
         case .overlay: OverlayPane(settings: settings, engine: engine)
         case .notifications: NotificationsPane(settings: settings, engine: engine)
-        case .about: AboutPane(settings: settings, engine: engine)
+        case .about: AboutPane(settings: settings, engine: engine, updates: updates)
         }
     }
 }
