@@ -5,9 +5,7 @@ disk, battery, temperature, process and host statistics from the kernel, then sh
 them in three places: the menu bar itself, a panel that drops down when you click the
 status item, and a floating overlay you can leave on your desktop.
 
-It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN. The
-only thing in it that opens a network connection is the public IP lookup, which ships
-off.
+It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN.
 
 ![The status item](docs/menubar-real.png)
 
