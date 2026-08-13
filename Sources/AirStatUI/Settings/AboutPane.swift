@@ -80,6 +80,8 @@ struct AboutPane: View {
                     SettingsCaution(caution)
                 } else if let note = manualNote {
                     SettingsFootnote(note)
+                } else if let checked = lastCheckedNote {
+                    SettingsFootnote(checked)
                 }
             } header: {
                 Text("Updates")
@@ -185,6 +187,16 @@ struct AboutPane: View {
     private var manualCaution: String? {
         guard hasCheckedManually, case .unavailable(let message)? = updates?.status else { return nil }
         return message
+    }
+
+    /// Standing answer to "is this thing actually running?", which the button alone
+    /// cannot give: with the automatic check deliberately silent, a user who has never
+    /// pressed anything otherwise sees nothing at all here.
+    private var lastCheckedNote: String? {
+        guard let checked = settings.settings.updates.lastCheckedAt else { return nil }
+        let relative = RelativeDateTimeFormatter()
+        relative.unitsStyle = .full
+        return "Last checked \(relative.localizedString(for: checked, relativeTo: Date()))."
     }
 
     private func checkForUpdates() {

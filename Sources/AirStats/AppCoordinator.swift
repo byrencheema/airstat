@@ -81,7 +81,14 @@ final class AppCoordinator {
         overlay.syncWithSettings()
 
         registerSystemObservers()
+        // The system follows the stored preference, and then the preference follows the
+        // system. Since the shipped default is on, a first launch registers the login
+        // item here; a registration macOS refuses would otherwise leave the toggle
+        // showing on for a login item that does not exist.
         LoginItem.synchronize(enabled: settingsStore.settings.general.launchAtLogin)
+        if LoginItem.isEnabled != settingsStore.settings.general.launchAtLogin {
+            settingsStore.update { $0.general.launchAtLogin = LoginItem.isEnabled }
+        }
     }
 
     func shutdown() {

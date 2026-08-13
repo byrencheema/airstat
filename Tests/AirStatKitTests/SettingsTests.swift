@@ -29,6 +29,18 @@ struct SettingsDecodingTests {
         }
     }
 
+    @Test("a fresh install opens at login, an existing one keeps its answer")
+    func launchAtLoginDefault() throws {
+        // The shipped default, which is what a Mac with no settings file gets.
+        #expect(GeneralSettings().launchAtLogin)
+        // A file that already says no must stay no. The default changed after release,
+        // and re-enabling a login item someone deliberately turned off would be the
+        // worst possible reading of "default it to on".
+        #expect(try decode(#"{"general":{"launchAtLogin":false}}"#).general.launchAtLogin == false)
+        // A file predating the key is an existing install too, so it does not opt in.
+        #expect(try decode(#"{"general":{}}"#).general.launchAtLogin == false)
+    }
+
     @Test("a malformed key falls back without losing its siblings")
     func malformedKeyIsIsolated() throws {
         let settings = try decode("""

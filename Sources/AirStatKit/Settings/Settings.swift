@@ -743,7 +743,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public var showsDockIcon: Bool
 
     public init(updateInterval: TimeInterval = 2,
-                launchAtLogin: Bool = false,
+                launchAtLogin: Bool = true,
                 appearance: AppearanceMode = .system,
                 temperatureUnit: TemperatureUnit = .celsius,
                 networkRateUnit: NetworkRateUnit = .bytes,
