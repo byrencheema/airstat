@@ -56,10 +56,6 @@ never SwiftUI or AppKit. The tests and `--probe` run in a windowless process.
 `Sources/AirStatUI/Design/DesignSystem.swift`. Add a token there rather than a literal at
 the call site.
 
-**Read CLAUDE.md.** It records platform behaviour that is expensive to rediscover, such
-as the memory the Metal renderer takes the first time a SwiftUI `Canvas` draws, and why a
-titled window loses its rounded corners when you clear its background.
-
 ## Commits
 
 One change per commit. Conventional Commits, on one line:

@@ -338,7 +338,7 @@ The bundle identifier was kept at first, on the reasoning below. That reasoning 
 about not stranding existing users, and there are none: the repo is private with no
 release. So the identifier, the settings directory and both window autosave names were
 all moved to AirStats while it is still free. Once a build is public this is closed
-for good, and the note in `CLAUDE.md` says so.
+for good, and the project notes say so.
 
 | Location | Text |
 |---|---|
@@ -403,7 +403,7 @@ data.
 **The lesson for the next person driving this app: check
 `CGSSessionScreenIsLocked` before concluding anything from an empty accessibility
 tree, and confirm against a control app you know has windows.** This is now recorded
-in `CLAUDE.md` beside the `screencapture` note.
+in the project notes beside the `screencapture` note.
 
 ### Withdrawn as unproven, not as disproven
 
@@ -475,8 +475,8 @@ is wired.
 to `settings.json` correctly. Restore Defaults is section-scoped and confirms first.
 Colour wells work, the "All Metrics" master swatch writes every metric at once, and
 "Use Default" clears an override. The shared `NSColorPanel` closes both when the pane
-changes and when the window closes, which is the documented hazard in `CLAUDE.md` and
-it is handled.
+changes and when the window closes, which is the documented hazard in the project
+notes and it is handled.
 
 **Overlay.** Enabling shows the window, it restores on relaunch (verified through
 `AIRSTAT_WINDOW_LOG=1`: `overlay shown frame=(16.0, 800.0, 220.0, 133.0) level=1000`),

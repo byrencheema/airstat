@@ -20,3 +20,6 @@ benchmark-report.html
 
 # Output of Scripts/release.sh.
 dist/
+
+# Local working notes, not published
+CLAUDE.md

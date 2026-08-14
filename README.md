@@ -121,8 +121,7 @@ run in a windowless process.
 ## Contributing
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the checks to run before a pull request and the
-house rules. [CLAUDE.md](CLAUDE.md) records platform behaviour that is expensive to
-rediscover, such as the stale objects an incremental SwiftPM build can link.
+house rules.
 
 ## License
 
