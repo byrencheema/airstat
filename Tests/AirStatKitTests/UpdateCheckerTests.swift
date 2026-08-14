@@ -319,6 +319,108 @@ struct UpdateCheckerTests {
         #expect(checker.availableRelease == nil)
     }
 
+    // MARK: What gets announced
+
+    /// The difference between telling someone and nagging them. `availableRelease`
+    /// stays true until the user upgrades, so a notification driven off it would fire
+    /// on every launch and every reopened gate for as long as they ignored it.
+    @Test("a release is announced once and then never again")
+    func announcedOnlyOnce() async {
+        let store = makeStore()
+        let recorder = Recorder()
+        recorder.set(release)
+        let checker = makeChecker(store, recorder)
+
+        checker.checkNow()
+        await checker.currentCheck?.value
+        #expect(checker.releaseToAnnounce?.version == "1.1")
+
+        checker.markAnnounced("1.1")
+        #expect(checker.releaseToAnnounce == nil)
+        // Still offered in About, which is a standing fact rather than an event.
+        #expect(checker.availableRelease?.version == "1.1")
+
+        // A relaunch, and a re-check that learns the same thing, stay quiet.
+        checker.checkNow()
+        await checker.currentCheck?.value
+        #expect(checker.releaseToAnnounce == nil)
+        #expect(UpdateChecker.releaseToAnnounce(in: store.settings, currentVersion: "1.0") == nil)
+    }
+
+    /// Keyed on the version rather than a flag, so being told about 1.1 does not buy
+    /// silence about 1.2.
+    @Test("the release after the one announced is announced too")
+    func nextReleaseIsAnnouncedAgain() async {
+        let store = makeStore()
+        let recorder = Recorder()
+        recorder.set(release)
+        let checker = makeChecker(store, recorder)
+
+        checker.checkNow()
+        await checker.currentCheck?.value
+        checker.markAnnounced("1.1")
+        #expect(checker.releaseToAnnounce == nil)
+
+        recorder.set(.release(UpdateRelease(version: "1.2",
+                                            url: URL(string: "https://airstats.app/download")!)))
+        checker.checkNow()
+        await checker.currentCheck?.value
+
+        #expect(checker.releaseToAnnounce?.version == "1.2")
+    }
+
+    @Test("nothing is announced while the notification setting is off")
+    func announcementRespectsTheSetting() async {
+        let store = makeStore()
+        store.update { $0.general.notifiesAboutUpdates = false }
+        let recorder = Recorder()
+        recorder.set(release)
+        let checker = makeChecker(store, recorder)
+
+        checker.checkNow()
+        await checker.currentCheck?.value
+
+        #expect(checker.releaseToAnnounce == nil)
+        // The user still gets the pill and the About row; they only opted out of the
+        // interruption.
+        #expect(checker.availableRelease?.version == "1.1")
+    }
+
+    @Test("the notification setting ships on")
+    func notifyDefaultsToOn() {
+        #expect(GeneralSettings().notifiesAboutUpdates)
+    }
+
+    /// Nothing the user is already running is worth a banner, so the version guard
+    /// has to sit in front of the announcement and not only in front of the notice.
+    @Test("the running version is never announced")
+    func announcementNeverOffersTheRunningVersion() async {
+        let store = makeStore()
+        let recorder = Recorder()
+        recorder.set(.release(UpdateRelease(version: "1.0",
+                                            url: URL(string: "https://airstats.app/download")!)))
+        let checker = makeChecker(store, recorder)
+
+        checker.checkNow()
+        await checker.currentCheck?.value
+
+        #expect(checker.releaseToAnnounce == nil)
+    }
+
+    @Test("what has been announced survives a relaunch")
+    func announcedVersionRoundTrips() throws {
+        var settings = Settings()
+        settings.updates = UpdateSettings(latestVersion: "1.1",
+                                          latestURL: URL(string: "https://airstats.app/download"),
+                                          notifiedVersion: "1.1")
+        let decoded = try JSONDecoder().decode(Settings.self,
+                                               from: try JSONEncoder().encode(settings))
+
+        #expect(decoded.updates.notifiedVersion == "1.1")
+        #expect(UpdateChecker.releaseToAnnounce(in: decoded, currentVersion: "1.0") == nil)
+        #expect(UpdateChecker.availableRelease(in: decoded, currentVersion: "1.0")?.version == "1.1")
+    }
+
     // MARK: The request
 
     @Test("the request carries the running version and the macOS version")

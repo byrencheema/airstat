@@ -172,6 +172,16 @@ struct SettingsRootView: View {
     /// Buttons rather than a `List`: every row stays keyboard-focusable, and the
     /// source list survives offscreen rendering, which an `NSTableView` does not.
     private var sidebar: some View {
+        VStack(spacing: 0) {
+            sectionList
+            // Outside the scroll view on purpose: it is a standing notice about the
+            // app rather than another destination, and a notice that scrolls out of
+            // sight is one the user is not reliably told.
+            updatePill
+        }
+    }
+
+    private var sectionList: some View {
         ScrollView {
             VStack(spacing: Design.Space.xxs) {
                 // The window's title bar is transparent and carries no title, so the
@@ -251,6 +261,49 @@ struct SettingsRootView: View {
             .padding(Design.Space.m)
         }
         .accessibilityLabel("Settings sections")
+    }
+
+    /// The release the user has not installed, read from stored settings so it is
+    /// here on a launch where no check has run yet.
+    private var availableRelease: UpdateRelease? {
+        updates?.availableRelease ?? UpdateChecker.availableRelease(in: settings.settings)
+    }
+
+    /// The standing "there is a newer version" notice.
+    ///
+    /// The notification that accompanies it is a single event: it can be missed,
+    /// swiped away, or never granted at all. This cannot. It needs no permission, it
+    /// is true for exactly as long as the update is outstanding, and it sits in the
+    /// one window a user opens when they are already thinking about the app.
+    @ViewBuilder
+    private var updatePill: some View {
+        if let release = availableRelease {
+            Button { tab = .about } label: {
+                HStack(spacing: Design.Space.s) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 11))
+                    Text("Update available")
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Design.Palette.accent)
+                .padding(.horizontal, Design.Space.l)
+                .padding(.vertical, Design.Space.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    // A tint of the accent rather than the accent itself: this is a
+                    // notice sharing a column with the selected row, and two solid
+                    // accent-weight shapes would argue about which one is selected.
+                    Capsule().fill(Design.Palette.accent.opacity(0.12))
+                }
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, Design.Space.m)
+            .padding(.bottom, Design.Space.m)
+            .accessibilityLabel("AirStats \(release.version) is available")
+            .accessibilityHint("Show About, where the download link is")
+        }
     }
 
     private var windowWidth: CGFloat { SettingsRootView.windowSize.width }

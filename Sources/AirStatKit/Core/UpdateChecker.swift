@@ -205,6 +205,11 @@ public final class UpdateChecker {
         UpdateChecker.availableRelease(in: settings.settings, currentVersion: currentVersion)
     }
 
+    /// The release the user has not been told about yet, or nil.
+    public var releaseToAnnounce: UpdateRelease? {
+        UpdateChecker.releaseToAnnounce(in: settings.settings, currentVersion: currentVersion)
+    }
+
     public nonisolated static func availableRelease(in settings: Settings,
                                                     currentVersion: String? = UpdateChecker.bundleVersion)
         -> UpdateRelease? {
@@ -213,6 +218,34 @@ public final class UpdateChecker {
               let url = settings.updates.latestURL,
               AppVersion.isNewer(version, than: currentVersion) else { return nil }
         return UpdateRelease(version: version, url: url)
+    }
+
+    /// The release worth *interrupting* the user about, which is a narrower question
+    /// than whether one is available.
+    ///
+    /// A banner is a one-time event and the notice in About is a standing fact, so the
+    /// two cannot be driven by the same predicate: `availableRelease` stays true for
+    /// as long as the user does not upgrade, and posting on that would mean a fresh
+    /// banner every time the app launched or the gate reopened. Announcing is keyed to
+    /// the version rather than to a flag so that the release after this one is still
+    /// worth saying out loud.
+    public nonisolated static func releaseToAnnounce(in settings: Settings,
+                                                     currentVersion: String? = UpdateChecker.bundleVersion)
+        -> UpdateRelease? {
+        guard settings.general.notifiesAboutUpdates,
+              let release = availableRelease(in: settings, currentVersion: currentVersion),
+              settings.updates.notifiedVersion != release.version else { return nil }
+        return release
+    }
+
+    /// Records that the user has been told, so the next launch stays quiet.
+    ///
+    /// Called after the notification is handed to the system rather than before, but
+    /// without waiting to hear that it was displayed: the failure this guards against
+    /// is repetition, and a banner the user never saw is a far smaller loss than one
+    /// they see every week.
+    public func markAnnounced(_ version: String) {
+        settings.update { $0.updates.notifiedVersion = version }
     }
 
     /// Whether the gate has reopened. A stored date in the future is treated as due:

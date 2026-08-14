@@ -60,6 +60,12 @@ struct GeneralPane: View {
                 }
                 Toggle("Check for updates automatically",
                        isOn: settings.binding(\.general.checksForUpdates))
+                // Disabled rather than hidden when the check is off: a row that
+                // vanishes reads as a setting that was lost, and this one keeps its
+                // value for when the check is switched back on.
+                Toggle("Notify me when an update is available",
+                       isOn: settings.binding(\.general.notifiesAboutUpdates))
+                    .disabled(!settings.settings.general.checksForUpdates)
             } header: {
                 Text("Startup & Privacy")
             } footer: {
@@ -67,7 +73,8 @@ struct GeneralPane: View {
                      The update check asks airstats.app once a week whether a newer \
                      version exists, and sends the version you are running and your \
                      macOS version so the answer fits this Mac. Nothing is ever \
-                     downloaded or installed; About is where a new version is mentioned.
+                     downloaded or installed. Each new version is announced once, and \
+                     stays listed in About until you install it.
                      """)
             }
 
