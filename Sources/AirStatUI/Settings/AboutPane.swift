@@ -61,6 +61,17 @@ struct AboutPane: View {
                         // one, and the whole point of the row is that it can be opened.
                         Link("Open the download page", destination: release.url)
                             .font(.callout)
+
+                        SettingsFootnote(installGuidance)
+                        if hasHomebrewReceipt {
+                            SettingsFootnote(homebrewGuidance)
+                        }
+
+                        // Offered on both paths rather than only the drag one. A stale
+                        // Caskroom receipt outlives the install it describes, so the
+                        // Homebrew hint above is a hint and nothing is hidden behind it.
+                        Button("Quit AirStats") { NSApp.terminate(nil) }
+                            .accessibilityHint("Quits so the downloaded copy can replace this one")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -178,6 +189,31 @@ struct AboutPane: View {
     }
 
     private var isChecking: Bool { updates?.isChecking ?? false }
+
+    /// What the user has to do with the download once they have it.
+    ///
+    /// Worth saying out loud because the obvious move fails: Finder refuses to replace
+    /// an app that is running, and the error it gives names the file rather than the
+    /// reason, so the natural reading is that the download is broken.
+    private var installGuidance: String {
+        "Quit AirStats before you drag the new copy into Applications. macOS will not replace an app while it is running."
+    }
+
+    private var homebrewGuidance: String {
+        "Installed with Homebrew? Run brew upgrade --cask airstats instead, which replaces it for you."
+    }
+
+    /// Whether a Homebrew cask receipt for AirStats exists on this machine.
+    ///
+    /// Deliberately weaker than "Homebrew installed this copy", which nothing on disk
+    /// can answer: a cask installs to /Applications like any other copy, and the
+    /// receipt stays behind after someone replaces that copy by hand. So it decides
+    /// whether to mention Homebrew, never whether to withhold the drag instructions.
+    /// Both prefixes are checked because Apple silicon and Intel disagree on it.
+    private var hasHomebrewReceipt: Bool {
+        ["/opt/homebrew/Caskroom/airstats", "/usr/local/Caskroom/airstats"]
+            .contains { FileManager.default.fileExists(atPath: $0) }
+    }
 
     private var manualNote: String? {
         guard hasCheckedManually, updates?.status == .upToDate else { return nil }
