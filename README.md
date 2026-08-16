@@ -86,7 +86,8 @@ signed bundle with `LSUIElement` set. Run the script with no argument for a debu
 An ad-hoc signature is enough to run a build you made yourself, and not enough to
 travel: macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh`
 is what produces the download above, signing with a Developer ID certificate and
-stapling Apple's notarization ticket to the `.dmg`.
+stapling Apple's notarization ticket to the `.dmg`. [RELEASING.md](RELEASING.md) is the
+order the steps around it have to happen in.
 
 ## Verify it without a screen
 
@@ -117,6 +118,7 @@ for a second during spin-down.
 | `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
 | `Scripts/release.sh` | Signs, notarizes and packages the `.dmg` that ships. |
+| `Scripts/appcast.py` | Writes a release into the appcast Sparkle reads. |
 | `Scripts/benchmark.py` | Samples the menu bar monitors on your Mac over one shared window. |
 
 `AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
