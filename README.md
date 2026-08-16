@@ -15,7 +15,11 @@ It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLA
 
 [**Download AirStats**](https://github.com/byrencheema/airstats/releases/latest/download/AirStats.dmg),
 open it, and drag the app to Applications. It is signed and notarized, so it opens with
-no warning.
+no warning. It updates itself with [Sparkle][sparkle]: it asks airstats.app once a day
+whether a newer version exists and installs one only when you say so. General settings
+turns that off.
+
+[sparkle]: https://sparkle-project.org
 
 Or with Homebrew:
 
@@ -75,9 +79,9 @@ cp -R .build/arm64-apple-macosx/release/AirStats.app /Applications/
 open /Applications/AirStats.app
 ```
 
-`Scripts/build.sh` wraps the SwiftPM binary in a `.app` bundle and signs it ad hoc.
-macOS grants a status item only to a signed bundle with `LSUIElement` set. Run the
-script with no argument for a debug build.
+`Scripts/build.sh` wraps the SwiftPM binary in a `.app` bundle, copies `Sparkle.framework`
+into `Contents/Frameworks`, and signs it ad hoc. macOS grants a status item only to a
+signed bundle with `LSUIElement` set. Run the script with no argument for a debug build.
 
 An ad-hoc signature is enough to run a build you made yourself, and not enough to
 travel: macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh`
@@ -89,7 +93,7 @@ stapling Apple's notarization ticket to the `.dmg`.
 The binary samples collectors and draws its own UI offscreen.
 
 ```sh
-swift test                                  # 180 tests, some of which read real sensors
+swift test                                  # 183 tests, some of which read real sensors
 .build/debug/AirStats --probe cpu --repeat 5 # sample a collector and print what it got
 .build/debug/AirStats --render panel --dark  # write PNGs of a surface to ./render
 .build/debug/AirStats --help
