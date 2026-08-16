@@ -62,8 +62,8 @@ Sparkle's notice in any useful way, so this is what upgrades them.
 ## 5. Push the appcast, last
 
 In the site repo, `public/appcast.xml` now has the new item. Read it, commit that file
-alone, push. Vercel deploys it, `Cache-Control` holds it for five minutes, and installed
-copies start offering the update within a day.
+alone, push. Byren edits that repo in parallel, so stage the one file by name and never
+`git add -A`.
 
 Last for one reason: the item points at the GitHub asset from step 3. Publishing it
 before that release exists points every AirStats on earth at a 404.
@@ -71,6 +71,12 @@ before that release exists points every AirStats on earth at a 404.
 ```sh
 curl https://airstats.app/appcast.xml
 ```
+
+`vercel.json` serves this file with `Cache-Control: public, max-age=300`, so for up to
+five minutes after the push that command can still show the old file and so can a copy
+of AirStats that just checked. Wait it out before concluding the deploy failed.
+Installed copies check once a day, so the release reaches everyone over the day after
+that, not immediately.
 
 ## Testing an update without shipping one
 
