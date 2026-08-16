@@ -72,13 +72,13 @@ APP="$(Scripts/build.sh release | tail -n 1)"
 # detritus not allowed" that names no file.
 xattr -cr "$APP"
 
-# Sparkle is four executables and an app inside a framework, and notarization checks
-# every one of them, so each is signed here before the bundle that contains them.
+# Sparkle's framework holds two XPC services, the Autoupdate tool and Updater.app, and
+# notarization checks every one of them, so each is signed before the thing containing
+# it. Innermost first: signing a container records the hashes of what it holds.
 #
-# Innermost first, because signing a container records the hashes of what it holds; the
-# order below is Sparkle's own, and --deep is not used on any of it, deliberately. The
-# Downloader XPC service carries an entitlement that belongs to it alone, and a deep
-# signature would apply this app's (empty) entitlements to all five.
+# --deep is deliberately not used on any of it, which is Sparkle's own instruction. The
+# Downloader service carries an entitlement that belongs to it alone, and a deep
+# signature would overwrite it with this app's.
 FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
 codesign --force --options runtime --timestamp \
   --sign "$IDENTITY" "$FRAMEWORK/Versions/B/XPCServices/Installer.xpc"
