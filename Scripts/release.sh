@@ -45,9 +45,24 @@ if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
 fi
 
 if ! xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
+  # The App Store Connect key is a file on disk, so the command below can name the real
+  # one rather than a placeholder to be worked out under pressure. The issuer cannot be
+  # recovered from anything local: it is the UUID on App Store Connect > Users and
+  # Access > Integrations > App Store Connect API.
+  KEY_FILE="$(ls "$HOME"/private_keys/AuthKey_*.p8 2>/dev/null | head -n 1)"
+  if [ -n "$KEY_FILE" ]; then
+    KEY_ID="$(basename "$KEY_FILE" .p8)"
+    KEY_ID="${KEY_ID#AuthKey_}"
+  else
+    KEY_FILE="~/private_keys/AuthKey_XXXXXXXXXX.p8"
+    KEY_ID="XXXXXXXXXX"
+  fi
   echo "error: no notarytool credential profile named '$PROFILE'." >&2
-  echo "  xcrun notarytool store-credentials $PROFILE \\" >&2
-  echo "    --key ~/private_keys/AuthKey_XXXXXXXXXX.p8 --key-id XXXXXXXXXX --issuer <uuid>" >&2
+  echo "  Store it once, then run this script again:" >&2
+  echo "    xcrun notarytool store-credentials $PROFILE \\" >&2
+  echo "      --key $KEY_FILE \\" >&2
+  echo "      --key-id $KEY_ID \\" >&2
+  echo "      --issuer <uuid from App Store Connect > Integrations > App Store Connect API>" >&2
   exit 1
 fi
 
