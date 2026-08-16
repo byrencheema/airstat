@@ -18,7 +18,7 @@ BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 APP="$BIN_DIR/AirStats.app"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 
 cp "$BIN_DIR/AirStats" "$APP/Contents/MacOS/AirStats"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
@@ -39,6 +39,22 @@ if [ -d "$BUNDLE" ]; then
   cp -R "$BUNDLE" "$APP/Contents/Resources/"
 else
   echo "error: $BUNDLE is missing; the app would launch with no logo" >&2
+  exit 1
+fi
+
+# Sparkle is a framework, and the binary asks for it at @rpath. SwiftPM leaves a copy
+# beside the binary, which is why the bare `.build/debug/AirStats` runs; the bundle
+# needs its own, because the executable inside it resolves @rpath through
+# @executable_path/../Frameworks (see Package.swift).
+#
+# ditto rather than cp -R: a framework is a tree of symlinks into Versions/, and the
+# ones that go missing here are the ones codesign refuses to sign later.
+SPARKLE="$BIN_DIR/Sparkle.framework"
+if [ -d "$SPARKLE" ]; then
+  rm -rf "$APP/Contents/Frameworks/Sparkle.framework"
+  ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+else
+  echo "error: $SPARKLE is missing; the app would not launch" >&2
   exit 1
 fi
 
