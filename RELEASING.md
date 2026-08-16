@@ -83,5 +83,11 @@ defaults write com.airstat.AirStats AirStatsFeedURL https://<preview>/staging/ap
 defaults delete com.airstat.AirStats AirStatsFeedURL
 ```
 
-The feed has to be https. Sparkle refuses anything else, and so does App Transport
-Security, which is why this uses a deployed preview rather than a local server.
+The feed has to be https, so a local server will not do: Sparkle refuses anything else
+and so does App Transport Security.
+
+It also has to be reachable without signing in, which rules out the obvious host. The
+Vercel project protects every deployment except its custom domains, so a preview URL
+answers Sparkle with a 302 to a Vercel login page rather than with the appcast. Staging
+files have to go somewhere public: airstats.app itself under a path nothing links to,
+or a host outside Vercel.
