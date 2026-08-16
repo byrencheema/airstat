@@ -35,5 +35,15 @@
 	<false/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<!-- Sparkle. SUFeedURL is the appcast Scripts/release.sh appends each release to.
+	     SUPublicEDKey is the public half of the EdDSA key that signs the dmg; its
+	     private half is in the login keychain and backed up outside both repos.
+	     Replacing it orphans every copy already installed. -->
+	<key>SUFeedURL</key>
+	<string>https://airstats.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Qhygt891m7jN7eTbSK4OKLjHwzU9HEOvRyJtSoib8kM=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>

@@ -4,6 +4,8 @@ import AirStatKit
 
 struct GeneralPane: View {
     let settings: SettingsStore
+    /// Absent in the offscreen renderer, which has no running app to update.
+    var updater: SoftwareUpdater?
 
     /// `LoginItem.synchronize` reports a real failure — a missing bundle, a
     /// revoked approval — and the toggle is worthless if that is swallowed.
@@ -58,23 +60,18 @@ struct GeneralPane: View {
                 if let loginItemError {
                     SettingsCaution(loginItemError)
                 }
-                Toggle("Check for updates automatically",
-                       isOn: settings.binding(\.general.checksForUpdates))
-                // Disabled rather than hidden when the check is off: a row that
-                // vanishes reads as a setting that was lost, and this one keeps its
-                // value for when the check is switched back on.
-                Toggle("Notify me when an update is available",
-                       isOn: settings.binding(\.general.notifiesAboutUpdates))
-                    .disabled(!settings.settings.general.checksForUpdates)
+                // Stored by Sparkle rather than in the settings file, so this reads and
+                // writes the updater itself. Only the offscreen renderer has none.
+                Toggle("Check for updates automatically", isOn: checksAutomatically)
+                    .disabled(updater == nil)
             } header: {
                 Text("Startup & Privacy")
             } footer: {
                 Text("""
-                     The update check asks airstats.app once a week whether a newer \
-                     version exists, and sends the version you are running and your \
-                     macOS version so the answer fits this Mac. Nothing is ever \
-                     downloaded or installed. Each new version is announced once, and \
-                     stays listed in About until you install it.
+                     The update check asks airstats.app once a day whether a newer \
+                     version exists, and sends the version you are running and the \
+                     version of Sparkle, the updater AirStats uses. Nothing is \
+                     installed until you say so.
                      """)
             }
 
@@ -91,6 +88,11 @@ struct GeneralPane: View {
     }
 
     // MARK: Side effects
+
+    private var checksAutomatically: Binding<Bool> {
+        Binding(get: { updater?.checksAutomatically ?? true },
+                set: { updater?.setChecksAutomatically($0) })
+    }
 
     /// Process-level state rather than a stored preference, so the store's value alone
     /// would change nothing until the next launch.

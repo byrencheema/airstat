@@ -26,9 +26,9 @@ public final class ThresholdMonitor {
         observationTask != nil || authority.isRunning
     }
 
-    /// The authority is injected rather than defaulted because it is shared with
-    /// `UpdateNotifier`: a default would quietly give each of them their own, which is
-    /// two permission prompts and a fight over the delegate slot.
+    /// The authority is injected rather than defaulted so that anything else which
+    /// starts posting shares this one: a default would quietly give each poster its
+    /// own, which is a second permission prompt and a fight over the delegate slot.
     public init(engine: MetricsEngine, settings: SettingsStore,
                 authority: NotificationAuthority) {
         self.engine = engine

@@ -104,6 +104,20 @@ struct SettingsDecodingTests {
         #expect(restored == original)
     }
 
+    /// Every settings file written before Sparkle still holds the home-made checker's
+    /// keys. They are read by nothing now, and a decoder that choked on them would
+    /// throw away the user's whole configuration to say so.
+    @Test("a file from the retired update checker still loads")
+    func retiredUpdateKeysAreIgnored() throws {
+        let settings = try decode("""
+        {"updates":{"lastCheckedAt":776000000,"latestVersion":"1.1",
+                    "latestURL":"https://airstats.app/download","notifiedVersion":"1.1"},
+         "general":{"checksForUpdates":false,"notifiesAboutUpdates":false,"launchAtLogin":true}}
+        """)
+        #expect(settings.general.launchAtLogin)
+        #expect(settings.general.updateInterval == 2)
+    }
+
     @Test("truncated JSON throws so the caller can fall back to the backup")
     func truncatedThrows() {
         #expect(throws: (any Error).self) {

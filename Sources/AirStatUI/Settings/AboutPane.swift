@@ -6,20 +6,12 @@ import AirStatKit
 struct AboutPane: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
-    /// Absent in the offscreen renderer, which has no running app to check on behalf
-    /// of. The notice below is drawn from stored settings either way; only the button
-    /// needs a checker to press.
-    var updates: UpdateChecker?
+    /// Absent in the offscreen renderer, which has no running app to update.
+    var updater: SoftwareUpdater?
 
     @State private var transferResult: String?
     @State private var transferFailed = false
     @State private var isConfirmingFullReset = false
-    /// Whether the user pressed Check Now in this window.
-    ///
-    /// "Up to date" and "could not reach the service" are answers to a question the
-    /// user asked, and noise otherwise: the automatic check is meant to be invisible
-    /// unless it finds something, so its result is not reported here.
-    @State private var hasCheckedManually = false
 
     /// Live identity when the app is running; the render harness has no engine, so
     /// it shows the same fixture machine every other rendered surface shows.
@@ -49,49 +41,16 @@ struct AboutPane: View {
             }
 
             Section {
-                if let release = availableRelease {
-                    VStack(alignment: .leading, spacing: Design.Space.xs) {
-                        HStack(spacing: Design.Space.s) {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .foregroundStyle(Design.Palette.accent)
-                            Text("AirStats \(release.version) is available.")
-                        }
-                        // Not folded into one accessibility element with the line above
-                        // it: combining children replaces the link with a description of
-                        // one, and the whole point of the row is that it can be opened.
-                        Link("Open the download page", destination: release.url)
-                            .font(.callout)
-
-                        SettingsFootnote(installGuidance)
-                        if hasHomebrewReceipt {
-                            SettingsFootnote(homebrewGuidance)
-                        }
-
-                        // Offered on both paths rather than only the drag one. A stale
-                        // Caskroom receipt outlives the install it describes, so the
-                        // Homebrew hint above is a hint and nothing is hidden behind it.
-                        Button("Quit AirStats") { NSApp.terminate(nil) }
-                            .accessibilityHint("Quits so the downloaded copy can replace this one")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
                 HStack(spacing: Design.Space.l) {
-                    Button("Check Now") { checkForUpdates() }
-                        .disabled(updates == nil || isChecking)
+                    // Everything past the press belongs to Sparkle: it reports up to
+                    // date, an error, or an update with its release notes and an
+                    // Install button, in its own window.
+                    Button("Check for Updates…") { updater?.checkForUpdates() }
+                        .disabled(updater?.canCheck != true)
                         .accessibilityHint("Asks airstats.app whether a newer version exists")
-                    if isChecking {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel("Checking for updates")
-                    }
                     Spacer()
                 }
-                if let caution = manualCaution {
-                    SettingsCaution(caution)
-                } else if let note = manualNote {
-                    SettingsFootnote(note)
-                } else if let checked = lastCheckedNote {
+                if let checked = lastCheckedNote {
                     SettingsFootnote(checked)
                 }
             } header: {
@@ -181,63 +140,14 @@ struct AboutPane: View {
 
     // MARK: Updates
 
-    /// Read from stored settings rather than from the checker's status, so the notice
-    /// is here on the next launch too: a release is worth mentioning until it is
-    /// installed, not for the ten minutes after it was found.
-    private var availableRelease: UpdateRelease? {
-        updates?.availableRelease ?? UpdateChecker.availableRelease(in: settings.settings)
-    }
-
-    private var isChecking: Bool { updates?.isChecking ?? false }
-
-    /// What the user has to do with the download once they have it.
-    ///
-    /// Worth saying out loud because the obvious move fails: Finder refuses to replace
-    /// an app that is running, and the error it gives names the file rather than the
-    /// reason, so the natural reading is that the download is broken.
-    private var installGuidance: String {
-        "Quit AirStats before you drag the new copy into Applications. macOS will not replace an app while it is running."
-    }
-
-    private var homebrewGuidance: String {
-        "Installed with Homebrew? Run brew upgrade --cask airstats instead, which replaces it for you."
-    }
-
-    /// Whether a Homebrew cask receipt for AirStats exists on this machine.
-    ///
-    /// Deliberately weaker than "Homebrew installed this copy", which nothing on disk
-    /// can answer: a cask installs to /Applications like any other copy, and the
-    /// receipt stays behind after someone replaces that copy by hand. So it decides
-    /// whether to mention Homebrew, never whether to withhold the drag instructions.
-    /// Both prefixes are checked because Apple silicon and Intel disagree on it.
-    private var hasHomebrewReceipt: Bool {
-        ["/opt/homebrew/Caskroom/airstats", "/usr/local/Caskroom/airstats"]
-            .contains { FileManager.default.fileExists(atPath: $0) }
-    }
-
-    private var manualNote: String? {
-        guard hasCheckedManually, updates?.status == .upToDate else { return nil }
-        return "AirStats is up to date."
-    }
-
-    private var manualCaution: String? {
-        guard hasCheckedManually, case .unavailable(let message)? = updates?.status else { return nil }
-        return message
-    }
-
     /// Standing answer to "is this thing actually running?", which the button alone
-    /// cannot give: with the automatic check deliberately silent, a user who has never
-    /// pressed anything otherwise sees nothing at all here.
+    /// cannot give: the automatic check is silent when it finds nothing, so a user who
+    /// has never pressed anything would otherwise see no sign of it at all.
     private var lastCheckedNote: String? {
-        guard let checked = settings.settings.updates.lastCheckedAt else { return nil }
+        guard let checked = updater?.lastCheck else { return nil }
         let relative = RelativeDateTimeFormatter()
         relative.unitsStyle = .full
         return "Last checked \(relative.localizedString(for: checked, relativeTo: Date()))."
-    }
-
-    private func checkForUpdates() {
-        hasCheckedManually = true
-        updates?.checkNow()
     }
 
     private func coreText(_ system: SystemInfoSnapshot) -> String {
