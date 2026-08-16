@@ -19,7 +19,18 @@ IDENTITY="${SIGN_IDENTITY:-Developer ID Application}"
 PROFILE="${NOTARY_PROFILE:-AirStats}"
 DIST="dist"
 
+# Sparkle ships generate_keys and sign_update alongside the framework SwiftPM fetched,
+# so a checkout that can build can also sign an update. SPARKLE_BIN overrides it for a
+# copy unpacked from the tarball.
+SPARKLE_BIN="${SPARKLE_BIN:-.build/artifacts/sparkle/Sparkle/bin}"
+
+# The same key `generate_keys -x` wrote, read from the file rather than from the login
+# keychain. sign_update reads the keychain by default and macOS answers that with a
+# dialog no script can click, which stalls the release halfway through notarization.
+SPARKLE_KEY="${SPARKLE_KEY:-$HOME/private_keys/airstats_sparkle_ed25519.key}"
+
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist)"
 
 # Deliberately unversioned. The README and the site both link
 # releases/latest/download/AirStats.dmg, which resolves only against an asset of
@@ -40,12 +51,45 @@ if ! xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; the
   exit 1
 fi
 
+if [ ! -x "$SPARKLE_BIN/sign_update" ]; then
+  echo "error: no sign_update in '$SPARKLE_BIN'." >&2
+  echo "  Run swift build once to fetch Sparkle, or set SPARKLE_BIN to the bin/" >&2
+  echo "  directory of an unpacked Sparkle-<version>.tar.xz." >&2
+  exit 1
+fi
+
+if [ ! -f "$SPARKLE_KEY" ]; then
+  echo "error: no Sparkle private key at '$SPARKLE_KEY'." >&2
+  echo "  It is the file $SPARKLE_BIN/generate_keys -x wrote. Without it no copy" >&2
+  echo "  of AirStats in the field will accept this build as an update." >&2
+  exit 1
+fi
+
 APP="$(Scripts/build.sh release | tail -n 1)"
 
 # Extended attributes picked up from the filesystem (quarantine flags, Finder info)
 # make codesign fail with a bare "resource fork, Finder information, or similar
 # detritus not allowed" that names no file.
 xattr -cr "$APP"
+
+# Sparkle is four executables and an app inside a framework, and notarization checks
+# every one of them, so each is signed here before the bundle that contains them.
+#
+# Innermost first, because signing a container records the hashes of what it holds; the
+# order below is Sparkle's own, and --deep is not used on any of it, deliberately. The
+# Downloader XPC service carries an entitlement that belongs to it alone, and a deep
+# signature would apply this app's (empty) entitlements to all five.
+FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
+codesign --force --options runtime --timestamp \
+  --sign "$IDENTITY" "$FRAMEWORK/Versions/B/XPCServices/Installer.xpc"
+codesign --force --options runtime --timestamp --preserve-metadata=entitlements \
+  --sign "$IDENTITY" "$FRAMEWORK/Versions/B/XPCServices/Downloader.xpc"
+codesign --force --options runtime --timestamp \
+  --sign "$IDENTITY" "$FRAMEWORK/Versions/B/Autoupdate"
+codesign --force --options runtime --timestamp \
+  --sign "$IDENTITY" "$FRAMEWORK/Versions/B/Updater.app"
+codesign --force --options runtime --timestamp \
+  --sign "$IDENTITY" "$FRAMEWORK"
 
 # --options runtime is the hardened runtime, which notarization refuses to accept
 # without. --timestamp pins the signature to a trusted clock so it stays valid after
@@ -88,6 +132,21 @@ xcrun stapler staple "$DMG"
 # what they would see instead of the app opening.
 spctl --assess --type open --context context:primary-signature -v "$DMG"
 
+# A second copy under the version, because the unversioned name is about to be
+# overwritten by the next run and a dmg is minutes of notarization to reproduce.
+cp "$DMG" "$DIST/AirStats-$VERSION.dmg"
+
+# Sparkle installs a dmg only if its EdDSA signature matches the SUPublicEDKey in the
+# copy already running, so this is what makes the file installable rather than merely
+# downloadable.
+SIGNATURE="$("$SPARKLE_BIN/sign_update" --ed-key-file "$SPARKLE_KEY" "$DMG")"
+
+# Writes into the site checkout beside this one by default. APPCAST points it somewhere
+# else, which is how a dry run stays out of a repo it is not ready to commit to.
+uv run Scripts/appcast.py \
+  --version "$VERSION" --build "$BUILD" --dmg "$DMG" --signature "$SIGNATURE" \
+  ${APPCAST:+--appcast "$APPCAST"}
+
 # The cask in byrencheema/homebrew-tap pins a version and a checksum of this exact file,
 # and nothing above updates it. A release that ships without that bump leaves everyone
 # who installed with Homebrew on the previous version, with no signal that a newer one
@@ -95,8 +154,17 @@ spctl --assess --type open --context context:primary-signature -v "$DMG"
 # from memory later.
 SHA="$(shasum -a 256 "$DMG" | cut -d ' ' -f 1)"
 
-echo "$DMG (version $VERSION)"
 echo
-echo "Next: bump Casks/a/airstats.rb in byrencheema/homebrew-tap, then push the tag."
-echo "  version \"$VERSION\""
-echo "  sha256 \"$SHA\""
+echo "$DMG (version $VERSION, build $BUILD)"
+echo "  sha256 $SHA"
+echo "  $SIGNATURE"
+echo
+echo "Next, in this order (RELEASING.md has the reasons):"
+echo "  1. git tag v$VERSION && git push origin v$VERSION"
+echo "  2. gh release create v$VERSION $DMG --title \"AirStats $VERSION\""
+echo "     The asset must be named AirStats.dmg. The appcast item already points at it."
+echo "  3. Bump Casks/a/airstats.rb in byrencheema/homebrew-tap:"
+echo "       version \"$VERSION\""
+echo "       sha256 \"$SHA\""
+echo "  4. Commit and push public/appcast.xml in airstat-site. Do this last: it is what"
+echo "     tells every installed copy to go and download the file from step 2."
