@@ -38,14 +38,20 @@ DOWNLOAD_URL = "https://github.com/byrencheema/airstats/releases/download/v{vers
 # launch is worse than offering none: Sparkle installs it and the app stops opening.
 MINIMUM_SYSTEM_VERSION = "14.0"
 
+# Four spaces, because that is what the file in the site repo uses and rewriting its
+# indentation on every release would bury one new item in a whole-file diff.
+INDENT = "    "
+
+# Only reached when the site checkout has no appcast at all, and written to match the
+# one that is there so the two cannot drift.
 EMPTY_APPCAST = """<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="{ns}">
-  <channel>
-    <title>AirStats</title>
-    <link>https://airstats.app/appcast.xml</link>
-    <description>Updates for AirStats.</description>
-    <language>en</language>
-  </channel>
+    <channel>
+        <title>AirStats</title>
+        <link>https://airstats.app</link>
+        <description>AirStats releases.</description>
+        <language>en</language>
+    </channel>
 </rss>
 """.format(ns=SPARKLE_NS)
 
@@ -76,12 +82,17 @@ def build_number(item):
 
 
 def make_item(version, build, signature, length):
+    """One release, in the element order the site repo's CLAUDE.md documents.
+
+    Sparkle does not care about the order. The person reading a diff of the appcast
+    does, and there is no reason for the generator and the documentation to disagree.
+    """
     item = ET.Element("item")
-    ET.SubElement(item, "title").text = f"AirStats {version}"
-    ET.SubElement(item, "pubDate").text = format_datetime(datetime.now(timezone.utc))
+    ET.SubElement(item, "title").text = version
     ET.SubElement(item, f"{{{SPARKLE_NS}}}version").text = build
     ET.SubElement(item, f"{{{SPARKLE_NS}}}shortVersionString").text = version
     ET.SubElement(item, f"{{{SPARKLE_NS}}}minimumSystemVersion").text = MINIMUM_SYSTEM_VERSION
+    ET.SubElement(item, "pubDate").text = format_datetime(datetime.now(timezone.utc))
     ET.SubElement(item, "enclosure", {
         "url": DOWNLOAD_URL.format(version=version),
         f"{{{SPARKLE_NS}}}edSignature": signature,
@@ -138,10 +149,12 @@ def main():
     for item in sorted(items, key=build_number, reverse=True):
         channel.append(item)
 
-    ET.indent(tree, space="  ")
-    tree.write(args.appcast, encoding="utf-8", xml_declaration=True)
-    with open(args.appcast, "a", encoding="utf-8") as file:
-        file.write("\n")
+    ET.indent(tree, space=INDENT)
+    # The declaration is written by hand because ElementTree quotes its attributes with
+    # apostrophes, and a release that flipped every quote in the file would be a diff
+    # nobody can read for the one line that matters.
+    body = ET.tostring(tree.getroot(), encoding="unicode")
+    args.appcast.write_text(f'<?xml version="1.0" encoding="utf-8"?>\n{body}\n', encoding="utf-8")
     print(f"appcast.py: wrote AirStats {args.version} (build {args.build}) into {args.appcast}")
 
 
