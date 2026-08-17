@@ -86,8 +86,7 @@ signed bundle with `LSUIElement` set. Run the script with no argument for a debu
 An ad-hoc signature is enough to run a build you made yourself, and not enough to
 travel: macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh`
 is what produces the download above, signing with a Developer ID certificate and
-stapling Apple's notarization ticket to the `.dmg`. [RELEASING.md](RELEASING.md) is the
-order the steps around it have to happen in.
+stapling Apple's notarization ticket to the `.dmg`.
 
 ## Verify it without a screen
 

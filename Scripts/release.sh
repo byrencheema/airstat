@@ -174,7 +174,7 @@ echo "$DMG (version $VERSION, build $BUILD)"
 echo "  sha256 $SHA"
 echo "  $SIGNATURE"
 echo
-echo "Next, in this order (RELEASING.md has the reasons):"
+echo "Next, in this order (docs/RELEASING.md has the reasons):"
 echo "  1. git tag v$VERSION && git push origin v$VERSION"
 echo "  2. gh release create v$VERSION $DMG --title \"AirStats $VERSION\""
 echo "     The asset must be named AirStats.dmg. The appcast item already points at it."
