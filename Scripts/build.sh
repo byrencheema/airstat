@@ -58,6 +58,25 @@ else
   exit 1
 fi
 
+# Sparkle writes "1.2 is now available—you have 1.1", and nothing else this app puts on
+# screen uses an em dash. Only the English values are rewritten: the keys are what the
+# framework looks strings up by, so changing one loses the translation entirely, and the
+# other languages are somebody else's prose. Patched here rather than upstream because
+# Scripts/release.sh signs the framework after this runs, so the signature covers it.
+python3 - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Base.lproj/Sparkle.strings" <<'PY'
+import plistlib, sys
+
+path = sys.argv[1]
+with open(path, 'rb') as handle:
+    strings = plistlib.load(handle)
+
+patched = {key: value.replace('available—you have', 'available, you have')
+           for key, value in strings.items()}
+if patched != strings:
+    with open(path, 'wb') as handle:
+        plistlib.dump(patched, handle, fmt=plistlib.FMT_BINARY)
+PY
+
 # Ad-hoc signature. Without any signature macOS refuses some window-server
 # privileges a status item needs.
 codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || {
