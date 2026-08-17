@@ -11,14 +11,26 @@ public struct PanelRootView: View {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
+    /// Absent in the offscreen renderer, which has no Sparkle to ask.
+    private let updates: SoftwareUpdater?
 
-    public init(engine: MetricsEngine, settings: SettingsStore) {
+    public init(engine: MetricsEngine, settings: SettingsStore, updates: SoftwareUpdater? = nil) {
         self.engine = engine
         self.settings = settings
+        self.updates = updates
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let version = updates?.pendingVersion {
+                PanelUpdateRow(version: version) { [updates] in
+                    // Sparkle's window is a window, and the panel closes when it loses
+                    // key, so it would take the update with it on the way out.
+                    actions.dismiss()
+                    updates?.checkForUpdates()
+                }
+                PanelSeparator()
+            }
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(modules.enumerated()), id: \.element) { index, module in
@@ -38,6 +50,8 @@ public struct PanelRootView: View {
         .frame(width: PanelSettings.width)
         .environment(\.metricFormatter, MetricFormatter(settings: settings.settings.general))
     }
+
+    @Environment(\.panelActions) private var actions
 
     private var modules: [PanelModule] { settings.settings.panel.visibleModules }
 
@@ -77,6 +91,47 @@ struct PanelSeparator: View {
             .frame(height: Design.Space.hairline)
             .padding(.horizontal, Design.Space.panelInset)
             .accessibilityHidden(true)
+    }
+}
+
+/// The whole of what a scheduled update does to the app until the user asks for more.
+///
+/// It sits above the modules rather than in the footer because it is news and the footer
+/// is furniture, and it is one row rather than a banner because an update is not more
+/// important than the readings the user opened the panel to see.
+struct PanelUpdateRow: View {
+    let version: String
+    let install: @MainActor () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: install) {
+            HStack(spacing: Design.Space.s) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(Design.Text.label)
+                    .foregroundStyle(Design.Palette.accent)
+                Text("AirStats \(version) is available")
+                    .font(Design.Text.label)
+                    .foregroundStyle(Design.Palette.primaryText)
+                Spacer(minLength: Design.Space.m)
+                Text("Install")
+                    .font(Design.Text.caption)
+                    .foregroundStyle(Design.Palette.accent)
+            }
+            .padding(.horizontal, Design.Space.panelInset)
+            .padding(.vertical, Design.Space.m)
+            .background(isHovering ? Design.Palette.track : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(Design.Motion.respectingAccessibility(Design.Motion.hover)) {
+                isHovering = hovering
+            }
+        }
+        .accessibilityLabel("AirStats \(version) is available")
+        .accessibilityHint("Opens the updater to install it")
     }
 }
 

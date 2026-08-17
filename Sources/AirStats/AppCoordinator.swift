@@ -18,6 +18,7 @@ final class AppCoordinator {
     private let thresholdMonitor: ThresholdMonitor
     private let hotKeys: GlobalHotKeyCenter
     private let updater: SoftwareUpdater
+    private let updateAnnouncer: UpdateAnnouncer
 
     private var observers: [any NSObjectProtocol] = []
     /// Where the panel is currently hung. Kept here because with one status item per
@@ -34,10 +35,11 @@ final class AppCoordinator {
         self.engine = engine
         self.updater = updater
         self.statusItem = StatusItemController(engine: engine, settings: store)
-        self.panel = PanelController(engine: engine, settings: store)
+        self.panel = PanelController(engine: engine, settings: store, updates: updater)
         self.overlay = OverlayController(engine: engine, settings: store)
         self.settingsWindow = SettingsWindowController(engine: engine, settings: store, updater: updater)
         self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store, authority: authority)
+        self.updateAnnouncer = UpdateAnnouncer(updates: updater, authority: authority)
         self.hotKeys = GlobalHotKeyCenter(settings: store)
     }
 
@@ -79,6 +81,7 @@ final class AppCoordinator {
         // Sparkle schedules its own checks from here, once a day, and shows its window
         // only when it finds something.
         updater.start()
+        updateAnnouncer.start()
         overlay.syncWithSettings()
 
         registerSystemObservers()
@@ -99,6 +102,7 @@ final class AppCoordinator {
             NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
+        updateAnnouncer.stop()
         hotKeys.stop()
         thresholdMonitor.stop()
         engine.stop()

@@ -26,21 +26,31 @@ public final class SoftwareUpdater {
     public private(set) var lastCheck: Date?
     public private(set) var checksAutomatically: Bool
 
+    /// The release a scheduled check found and Sparkle has been told not to announce
+    /// itself, or nil. Set for as long as that update is outstanding, which is what the
+    /// panel row and the one-time notice are drawn from.
+    public private(set) var pendingVersion: String?
+
     @ObservationIgnored private let controller: SPUStandardUpdaterController
-    /// Retained here because `SPUStandardUpdaterController` holds its delegate weakly.
+    /// Retained here because `SPUStandardUpdaterController` holds its delegates weakly.
     @ObservationIgnored private let feed: FeedOverride
+    @ObservationIgnored private let reminders: GentleReminders
     @ObservationIgnored private var observation: NSKeyValueObservation?
 
     public init() {
         let feed = FeedOverride()
+        let reminders = GentleReminders()
         // Started from `start()` instead, so the first appcast request happens when the
         // rest of the app comes up rather than while it is still being assembled.
         let controller = SPUStandardUpdaterController(startingUpdater: false,
                                                      updaterDelegate: feed,
-                                                     userDriverDelegate: nil)
+                                                     userDriverDelegate: reminders)
         self.feed = feed
+        self.reminders = reminders
         self.controller = controller
         self.checksAutomatically = controller.updater.automaticallyChecksForUpdates
+        reminders.onPending = { [weak self] version in self?.pendingVersion = version }
+        reminders.onResolved = { [weak self] in self?.pendingVersion = nil }
     }
 
     public func start() {
@@ -66,6 +76,49 @@ public final class SoftwareUpdater {
         canCheck = controller.updater.canCheckForUpdates
         lastCheck = controller.updater.lastUpdateCheckDate
         checksAutomatically = controller.updater.automaticallyChecksForUpdates
+    }
+}
+
+/// Keeps a scheduled update out of the user's way until they ask for it.
+///
+/// Sparkle's own alert is a window that arrives unasked and takes focus. That is right
+/// for an app someone is looking at and wrong for this one, whose whole claim is that it
+/// stays out of the way: the check runs daily on a timer, so the window would land in
+/// the middle of whatever the user was doing, to say something that can wait.
+///
+/// So a scheduled find is answered by a row in the panel and one notification, and
+/// Sparkle's window is shown only when the user acts on either. A check the user asked
+/// for is untouched, because then the window is the answer to their question.
+@MainActor
+private final class GentleReminders: NSObject, SPUStandardUserDriverDelegate {
+
+    var onPending: ((String) -> Void)?
+    var onResolved: (() -> Void)?
+
+    nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    /// `immediateFocus` is Sparkle saying it already has the user's attention, which is
+    /// the one case where its window is not an interruption.
+    nonisolated func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
+        immediateFocus
+    }
+
+    nonisolated func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
+        guard !handleShowingUpdate else { return }
+        let version = update.displayVersionString
+        MainActor.assumeIsolated { onPending?(version) }
+    }
+
+    /// The user has the update in front of them, so the standing notice has done its job.
+    nonisolated func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        MainActor.assumeIsolated { onResolved?() }
+    }
+
+    /// Installed, skipped, or put off. Sparkle raises the next one when it is due.
+    nonisolated func standardUserDriverWillFinishUpdateSession() {
+        MainActor.assumeIsolated { onResolved?() }
     }
 }
 

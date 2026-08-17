@@ -17,6 +17,8 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
+    /// Absent in the offscreen renderer. The panel's update row is drawn from it.
+    private let updates: SoftwareUpdater?
     private var window: PanelWindow?
 
     /// Every `NSEvent` monitor and notification observer this controller owns, in one
@@ -48,9 +50,10 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// bursts of use and is only released once the panel has genuinely been left alone.
     private static let windowReleaseDelay: Duration = .seconds(120)
 
-    public init(engine: MetricsEngine, settings: SettingsStore) {
+    public init(engine: MetricsEngine, settings: SettingsStore, updates: SoftwareUpdater? = nil) {
         self.engine = engine
         self.settings = settings
+        self.updates = updates
         super.init()
     }
 
@@ -158,7 +161,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     private func existingOrNewWindow() -> PanelWindow {
         if let window { return window }
-        let root = PanelRootView(engine: engine, settings: settings)
+        let root = PanelRootView(engine: engine, settings: settings, updates: updates)
             .environment(\.panelActions, PanelActions(
                 openSettings: { [weak self] in self?.onRequestSettings?() },
                 quit: { [weak self] in self?.onRequestQuit?() },
