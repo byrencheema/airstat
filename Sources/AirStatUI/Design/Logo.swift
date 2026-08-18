@@ -9,10 +9,24 @@ import AppKit
 /// Colour baked into the artwork would be colour that cannot follow any of them.
 public enum Logo {
 
+    /// SwiftPM's generated `Bundle.module` accessor looks beside the main bundle. That
+    /// works for a bare development executable, but a signed macOS app has to keep this
+    /// bundle in Contents/Resources: a resource beside Contents is left unsealed and
+    /// fails strict code-signature verification. Prefer the packaged location without
+    /// evaluating the generated accessor, whose missing-bundle path is a fatal error.
+    private static let resources: Bundle = {
+        if let url = Bundle.main.resourceURL?
+            .appendingPathComponent("AirStats_AirStatUI.bundle"),
+           let bundle = Bundle(url: url) {
+            return bundle
+        }
+        return Bundle.module
+    }()
+
     /// The mark as a template image, or nil if the resource is missing — the callers
     /// draw nothing rather than an empty box.
     public static let image: NSImage? = {
-        guard let url = Bundle.module.url(forResource: "Logo", withExtension: "png"),
+        guard let url = resources.url(forResource: "Logo", withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return nil }
         image.isTemplate = true
         image.accessibilityDescription = "AirStats"
