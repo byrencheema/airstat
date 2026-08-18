@@ -64,14 +64,19 @@ struct GeneralPane: View {
                 // writes the updater itself. Only the offscreen renderer has none.
                 Toggle("Check for updates automatically", isOn: checksAutomatically)
                     .disabled(updater == nil)
+                // Sparkle offers the same choice the first time it installs something,
+                // and takes the answer as standing. Without this row the only way back
+                // is to wait for another release and refuse it there.
+                Toggle("Install updates automatically", isOn: installsAutomatically)
+                    .disabled(updater == nil || !(updater?.checksAutomatically ?? false))
             } header: {
                 Text("Startup & Privacy")
             } footer: {
                 Text("""
                      The update check asks airstats.app once a day whether a newer \
                      version exists, and sends the version you are running and the \
-                     version of Sparkle, the updater AirStats uses. Nothing is \
-                     installed until you say so.
+                     version of Sparkle, the updater AirStats uses. Left off, a new \
+                     version waits in the panel until you install it.
                      """)
             }
 
@@ -92,6 +97,11 @@ struct GeneralPane: View {
     private var checksAutomatically: Binding<Bool> {
         Binding(get: { updater?.checksAutomatically ?? true },
                 set: { updater?.setChecksAutomatically($0) })
+    }
+
+    private var installsAutomatically: Binding<Bool> {
+        Binding(get: { updater?.installsAutomatically ?? false },
+                set: { updater?.setInstallsAutomatically($0) })
     }
 
     /// Process-level state rather than a stored preference, so the store's value alone

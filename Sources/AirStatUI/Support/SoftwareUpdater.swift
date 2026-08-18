@@ -25,6 +25,10 @@ public final class SoftwareUpdater {
     public private(set) var canCheck: Bool = false
     public private(set) var lastCheck: Date?
     public private(set) var checksAutomatically: Bool
+    /// Whether Sparkle downloads and installs on its own. Off until the user says
+    /// otherwise, either here or in Sparkle's own window, which offers the same choice
+    /// the first time it installs something.
+    public private(set) var installsAutomatically: Bool
 
     /// The release a scheduled check found and Sparkle has been told not to announce
     /// itself, or nil. Set for as long as that update is outstanding, which is what the
@@ -49,6 +53,7 @@ public final class SoftwareUpdater {
         self.reminders = reminders
         self.controller = controller
         self.checksAutomatically = controller.updater.automaticallyChecksForUpdates
+        self.installsAutomatically = controller.updater.automaticallyDownloadsUpdates
         reminders.onPending = { [weak self] version in self?.pendingVersion = version }
         reminders.onResolved = { [weak self] in self?.pendingVersion = nil }
     }
@@ -72,10 +77,16 @@ public final class SoftwareUpdater {
         checksAutomatically = controller.updater.automaticallyChecksForUpdates
     }
 
+    public func setInstallsAutomatically(_ enabled: Bool) {
+        controller.updater.automaticallyDownloadsUpdates = enabled
+        installsAutomatically = controller.updater.automaticallyDownloadsUpdates
+    }
+
     private func sync() {
         canCheck = controller.updater.canCheckForUpdates
         lastCheck = controller.updater.lastUpdateCheckDate
         checksAutomatically = controller.updater.automaticallyChecksForUpdates
+        installsAutomatically = controller.updater.automaticallyDownloadsUpdates
     }
 }
 
