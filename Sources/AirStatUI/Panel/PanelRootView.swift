@@ -111,7 +111,7 @@ struct PanelUpdateRow: View {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(Design.Text.label)
                     .foregroundStyle(Design.Palette.accent)
-                Text("AirStats \(version) is available")
+                Text("A new version is available")
                     .font(Design.Text.label)
                     .foregroundStyle(Design.Palette.primaryText)
                 Spacer(minLength: Design.Space.m)
@@ -130,7 +130,7 @@ struct PanelUpdateRow: View {
                 isHovering = hovering
             }
         }
-        .accessibilityLabel("AirStats \(version) is available")
+        .accessibilityLabel("A new version is available, AirStats \(version)")
         .accessibilityHint("Opens the updater to install it")
     }
 }
