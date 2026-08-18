@@ -94,7 +94,7 @@ public final class SoftwareUpdater {
 ///
 /// Sparkle's own alert is a window that arrives unasked and takes focus. That is right
 /// for an app someone is looking at and wrong for this one, whose whole claim is that it
-/// stays out of the way: the check runs daily on a timer, so the window would land in
+/// stays out of the way: the check runs on a timer, so the window would land in
 /// the middle of whatever the user was doing, to say something that can wait.
 ///
 /// So a scheduled find is answered by a row in the panel and one notification, and

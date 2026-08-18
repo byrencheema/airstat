@@ -45,6 +45,11 @@
 	<string>Qhygt891m7jN7eTbSK4OKLjHwzU9HEOvRyJtSoib8kM=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<!-- Weekly rather than Sparkle's daily default. Releases are nowhere near daily, so
+	     a daily check spends a request to learn nothing six times out of seven, and the
+	     appcast fetch is the only thing this app ever tells airstats.app about itself. -->
+	<key>SUScheduledCheckInterval</key>
+	<integer>604800</integer>
 	<!-- Checking is automatic, installing is not. A silent download that swaps the app
 	     out from under someone is a bigger liberty than this app has any reason to take,
 	     and the panel row exists precisely so the choice can wait for them. -->

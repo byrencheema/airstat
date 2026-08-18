@@ -128,14 +128,14 @@ struct AboutPane: View {
         .settingsFormStyle()
     }
 
+    /// The marketing version alone. The build number beside it is what Sparkle
+    /// compares releases by and means nothing to the person reading it.
     private var versionText: String {
-        let info = Bundle.main.infoDictionary
-        guard let short = info?["CFBundleShortVersionString"] as? String else {
+        guard let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else {
             // Running the bare SwiftPM binary rather than the assembled .app.
             return "Development build"
         }
-        let build = info?["CFBundleVersion"] as? String
-        return build.map { "Version \(short) (\($0))" } ?? "Version \(short)"
+        return "Version \(short)"
     }
 
     // MARK: Updates

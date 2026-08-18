@@ -73,7 +73,7 @@ struct GeneralPane: View {
                 Text("Startup & Privacy")
             } footer: {
                 Text("""
-                     The update check asks airstats.app once a day whether a newer \
+                     The update check asks airstats.app once a week whether a newer \
                      version exists, and sends the version you are running and the \
                      version of Sparkle, the updater AirStats uses. Left off, a new \
                      version waits in the panel until you install it.

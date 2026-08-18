@@ -15,7 +15,7 @@ It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLA
 
 [**Download AirStats**](https://github.com/byrencheema/airstats/releases/latest/download/AirStats.dmg),
 open it, and drag the app to Applications. It is signed and notarized, so it opens with
-no warning. It updates itself with [Sparkle][sparkle]: it asks airstats.app once a day
+no warning. It updates itself with [Sparkle][sparkle]: it asks airstats.app once a week
 whether a newer version exists and installs one only when you say so. General settings
 turns that off.
 
@@ -93,7 +93,7 @@ stapling Apple's notarization ticket to the `.dmg`.
 The binary samples collectors and draws its own UI offscreen.
 
 ```sh
-swift test                                  # 183 tests, some of which read real sensors
+swift test                                  # 187 tests, some of which read real sensors
 .build/debug/AirStats --probe cpu --repeat 5 # sample a collector and print what it got
 .build/debug/AirStats --render panel --dark  # write PNGs of a surface to ./render
 .build/debug/AirStats --help

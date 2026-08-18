@@ -78,7 +78,7 @@ final class AppCoordinator {
         engine.start()
         thresholdMonitor.start()
         hotKeys.start()
-        // Sparkle schedules its own checks from here, once a day, and shows its window
+        // Sparkle schedules its own checks from here, once a week, and shows its window
         // only when it finds something.
         updater.start()
         updateAnnouncer.start()
