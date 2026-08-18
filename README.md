@@ -17,7 +17,7 @@ sysctl and CoreWLAN.
 ## Requirements
 
 - macOS 14 or later
-- Apple silicon or Intel
+- Apple silicon
 
 ## Install
 
