@@ -28,15 +28,16 @@ if [ -f Resources/AppIcon.icns ]; then
   cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
 
-# SwiftPM emits the UI target's resources as a bundle beside the binary. It has to
-# travel into Contents/Resources or `Bundle.module` finds nothing at runtime and the
-# app launches without its own mark.
+# SwiftPM emits the UI target's resources as a bundle beside the binary. Its generated
+# `Bundle.module` accessor looks beside `Bundle.main.bundleURL`, which is the .app root,
+# rather than in Contents/Resources. Keep it there or packaged builds crash the first
+# time a view asks for the logo (opening Settings is one such path).
 #
 # Named exactly rather than globbed: a tree built under an earlier package name leaves
 # that name's bundle in the bin directory forever, and a glob ships both.
 BUNDLE="$BIN_DIR/AirStats_AirStatUI.bundle"
 if [ -d "$BUNDLE" ]; then
-  cp -R "$BUNDLE" "$APP/Contents/Resources/"
+  cp -R "$BUNDLE" "$APP/"
 else
   echo "error: $BUNDLE is missing; the app would launch with no logo" >&2
   exit 1
