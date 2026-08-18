@@ -97,27 +97,35 @@ private final class GentleReminders: NSObject, SPUStandardUserDriverDelegate {
 
     nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
 
-    /// `immediateFocus` is Sparkle saying it already has the user's attention, which is
-    /// the one case where its window is not an interruption.
+    /// Always ours, whatever `immediateFocus` says.
+    ///
+    /// Sparkle sets that flag at launch, on the reasoning that an app the user just
+    /// opened is an app they are looking at. It does not hold here: this app is opened
+    /// by the login item, minutes before anyone touches the machine, and taking that as
+    /// permission to put a window up is how a background app ends up greeting someone
+    /// with a dialog they did not ask for.
     nonisolated func standardUserDriverShouldHandleShowingScheduledUpdate(
         _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
-        immediateFocus
+        false
     }
 
     nonisolated func standardUserDriverWillHandleShowingUpdate(
         _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
         guard !handleShowingUpdate else { return }
         let version = update.displayVersionString
+        WindowLog.log("update offered quietly version=\(version)")
         MainActor.assumeIsolated { onPending?(version) }
     }
 
     /// The user has the update in front of them, so the standing notice has done its job.
     nonisolated func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        WindowLog.log("update taken up by the user")
         MainActor.assumeIsolated { onResolved?() }
     }
 
     /// Installed, skipped, or put off. Sparkle raises the next one when it is due.
     nonisolated func standardUserDriverWillFinishUpdateSession() {
+        WindowLog.log("update session finished")
         MainActor.assumeIsolated { onResolved?() }
     }
 }

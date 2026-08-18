@@ -45,5 +45,10 @@
 	<string>Qhygt891m7jN7eTbSK4OKLjHwzU9HEOvRyJtSoib8kM=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<!-- Checking is automatic, installing is not. A silent download that swaps the app
+	     out from under someone is a bigger liberty than this app has any reason to take,
+	     and the panel row exists precisely so the choice can wait for them. -->
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
 </dict>
 </plist>
