@@ -1,25 +1,28 @@
 # AirStats
 
 AirStats is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
-disk, battery, temperature, process and host statistics from the kernel, then shows
-them in three places: the menu bar itself, a panel that drops down when you click the
-status item, and a floating overlay you can leave on your desktop.
+disk, battery, temperature, process and host statistics from the kernel and shows them in
+three places: the menu bar itself, a panel that drops down when you click the status item,
+and a floating overlay you can leave on your desktop.
 
-It has no Dock icon. It reads the system through Mach, IOKit, sysctl and CoreWLAN.
+It is built to be genuinely light. A menu bar monitor runs all day, every day, so AirStats
+holds a few megabytes and a fraction of a percent of one core rather than the tens of
+megabytes its peers take. It has no Dock icon, and reads the system through Mach, IOKit,
+sysctl and CoreWLAN.
 
 ![The status item](docs/menubar-real.png)
 
 ![The panel](docs/panel-light.png)
 
+## Requirements
+
+- macOS 14 or later
+- Apple silicon or Intel
+
 ## Install
 
-[**Download AirStats**](https://github.com/byrencheema/airstats/releases/latest/download/AirStats.dmg),
-open it, and drag the app to Applications. It is signed and notarized, so it opens with
-no warning. It updates itself with [Sparkle][sparkle]: it asks airstats.app once a week
-whether a newer version exists and installs one only when you say so. General settings
-turns that off.
-
-[sparkle]: https://sparkle-project.org
+Download it from [airstats.app](https://airstats.app), open the dmg and drag the app to
+Applications. It is signed and notarized, so it opens with no warning.
 
 Or with Homebrew:
 
@@ -27,51 +30,13 @@ Or with Homebrew:
 brew install --cask byrencheema/tap/airstats
 ```
 
-Building from source is below if you would rather.
-
-## Why it exists
-
-Menu bar monitors are supposed to be background software, and a lot of them are not.
-On a MacBook Pro (M3 Pro, macOS 26.5.2), sampled with one `top -l 2` run per interval
-across 160 paired samples:
-
-| App | Mean CPU | Memory | Threads |
-| --- | --- | --- | --- |
-| AirStats | 0.046% | 11.0 MB | 5 |
-| iStat Menus (suite) | 0.116% | 64.0 MB | 11 |
-| Stats 3.0.9 | 1.931% | 144.8 MB | 15 |
-
-That 11 MB is a cold instance whose panel has never been opened. A warm one, after the
-panel and settings have drawn, sits near 70 MB and does not give it back. Both numbers
-are in the [full write-up][benchmark], along with the accuracy checks: every collector was probed
-against an independent kernel source (`vm_stat`, `sysctl`, `netstat -ib`, `ioreg`,
-`pmset`) and matched on 48 of 48 checks.
-
-`vm_stat`, `sysctl`, `netstat -ib`, `ioreg` and `pmset` each get their own note in the
-[blog][blog], along with why a GPU can read 98% idle and still be busy.
-
-Do not take the table on faith. `Scripts/benchmark.py` runs the measurement behind it:
-
-```sh
-uv run Scripts/benchmark.py --samples 160
-```
-
-It samples every monitor running on your Mac through a single `top` invocation per
-interval, so they share one measuring window, and discards `top`'s first sample because
-it reports CPU since launch rather than over the interval. Your figures will not be
-these figures, since they depend on the machine and on what else it is doing. The
-ranking is the part that should reproduce.
-
-[benchmark]: https://airstats.app/blog/airstat-vs-stats-vs-istat-menus
-[blog]: https://airstats.app/blog
-
-## Requirements
-
-- macOS 14 or later
-- Swift 6 toolchain (Xcode 16)
-- Apple Silicon or Intel
+AirStats updates itself with [Sparkle](https://sparkle-project.org). It asks airstats.app
+once a week whether a newer version exists, and installs one only when you say so. Both of
+those can be turned off in General settings.
 
 ## Build from source
+
+You need the Swift 6 toolchain that ships with Xcode 16.
 
 ```sh
 Scripts/build.sh release
@@ -83,29 +48,10 @@ open /Applications/AirStats.app
 into `Contents/Frameworks`, and signs it ad hoc. macOS grants a status item only to a
 signed bundle with `LSUIElement` set. Run the script with no argument for a debug build.
 
-An ad-hoc signature is enough to run a build you made yourself, and not enough to
-travel: macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh`
-is what produces the download above, signing with a Developer ID certificate and
-stapling Apple's notarization ticket to the `.dmg`.
-
-## Verify it without a screen
-
-The binary samples collectors and draws its own UI offscreen.
-
-```sh
-swift test                                  # 187 tests, some of which read real sensors
-.build/debug/AirStats --probe cpu --repeat 5 # sample a collector and print what it got
-.build/debug/AirStats --render panel --dark  # write PNGs of a surface to ./render
-.build/debug/AirStats --help
-```
-
-`--probe` prints raw collector output so you can diff it against `top`, `vm_stat`,
-`netstat -ib`, `ioreg` and `pmset`. `--render` draws the menu bar, panel, overlay and
-settings from fixture data at both appearances and both backing scales.
-
-`NSVisualEffectView` draws nothing offscreen, so a render cannot judge a material or a
-translucency. The collector contract tests read live sensors, so the fan test can flake
-for a second during spin-down.
+An ad-hoc signature is enough to run a build you made yourself, and not enough to travel:
+macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh` is what
+produces the download above, signing with a Developer ID certificate and stapling Apple's
+notarization ticket to the `.dmg`.
 
 ## Source layout
 
