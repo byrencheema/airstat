@@ -4,28 +4,29 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>AirStats</string>
 	<key>CFBundleExecutable</key>
 	<string>AirStats</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.airstat.AirStats</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>AirStats</string>
-	<key>CFBundleDisplayName</key>
-	<string>AirStats</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1</string>
+	<string>1.2</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
+	<string>4</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<!-- Menu bar accessory: no Dock icon, no menu bar menus of its own. -->
 	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>AirStats</string>
@@ -33,27 +34,15 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
-	<key>NSHighResolutionCapable</key>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
 	<true/>
-	<!-- Sparkle. SUFeedURL is the appcast Scripts/release.sh appends each release to.
-	     SUPublicEDKey is the public half of the EdDSA key that signs the dmg; its
-	     private half is in the login keychain and backed up outside both repos.
-	     Replacing it orphans every copy already installed. -->
 	<key>SUFeedURL</key>
 	<string>https://airstats.app/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>Qhygt891m7jN7eTbSK4OKLjHwzU9HEOvRyJtSoib8kM=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<!-- Weekly rather than Sparkle's daily default. Releases are nowhere near daily, so
-	     a daily check spends a request to learn nothing six times out of seven, and the
-	     appcast fetch is the only thing this app ever tells airstats.app about itself. -->
 	<key>SUScheduledCheckInterval</key>
 	<integer>604800</integer>
-	<!-- Checking is automatic, installing is not. A silent download that swaps the app
-	     out from under someone is a bigger liberty than this app has any reason to take,
-	     and the panel row exists precisely so the choice can wait for them. -->
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
 </dict>
 </plist>
