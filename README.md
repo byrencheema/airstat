@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
+  <img src="docs/logo-light.png" alt="" width="104">
+</picture>
+
 <h3>AirStats</h3>
 
 An ultra lightweight macOS system monitor.
