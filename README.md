@@ -1,4 +1,12 @@
-# AirStats
+<div align="center">
+
+<h3>AirStats</h3>
+
+An ultra lightweight macOS system monitor.
+
+<hr width="140">
+
+</div>
 
 AirStats is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
 disk, battery, temperature, process and host statistics from the kernel and shows them in
@@ -9,10 +17,6 @@ It is built to be genuinely light. A menu bar monitor runs all day, every day, s
 holds a few megabytes and a fraction of a percent of one core rather than the tens of
 megabytes its peers take. It has no Dock icon, and reads the system through Mach, IOKit,
 sysctl and CoreWLAN.
-
-![The status item](docs/menubar-real.png)
-
-![The panel](docs/panel-light.png)
 
 ## Requirements
 
