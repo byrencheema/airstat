@@ -47,12 +47,15 @@ struct OverlayRootView: View {
                 OverlayModuleView(module: module, engine: engine, isCompact: overlay.isCompact)
             }
         }
+        // Equal top and bottom. The bottom used to be deeper, to hold the options
+        // button, and a window with more space under its content than over it reads as
+        // bottom-heavy long before anyone works out why. The button sits inside this
+        // margin instead of enlarging it.
+        //
+        // Deeper than the sides, and than the 12pt gap between modules: an outer margin
+        // narrower than the gaps inside it stops reading as the edge of anything.
         .padding(.horizontal, Design.Space.l)
-        .padding(.top, Design.Space.m)
-        // Deeper than the top on purpose: the options button lives in this strip, and
-        // a control that appears on hover must not land on top of the last row of a
-        // module the moment the pointer arrives.
-        .padding(.bottom, Design.Space.xl)
+        .padding(.vertical, Design.Space.xl)
         .frame(width: width, alignment: .leading)
         .environment(\.metricFormatter, MetricFormatter(settings: settings.settings.general))
         .floatingSurface(in: shape)
