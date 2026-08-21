@@ -97,7 +97,7 @@ private struct OverlayModuleView: View {
                 OverlayHeaderRow(readout: readout)
                 barRow(readout)
                 ForEach(details(of: readout)) { detail in
-                    ReadoutRow(detail.label, detail.value)
+                    OverlayDetailRow(detail: detail)
                         .padding(.leading, Self.indent)
                 }
             case .failure(let failure):
@@ -361,6 +361,35 @@ private struct OverlayHeaderRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(readout.title)
         .accessibilityValue(failure.map { "Unavailable. \($0.message)" } ?? readout.value ?? "")
+    }
+}
+
+/// A supporting line under a module's header.
+///
+/// Not `ReadoutRow`. The panel's row sets its value at full label colour, which is
+/// right under a 20pt headline and wrong under a 14pt one: at that distance a fan
+/// speed in full contrast reads as something you are being told to look at. These sit
+/// a size and a step of contrast below the header, which is the whole point of them.
+private struct OverlayDetailRow: View {
+    let detail: OverlayDetail
+
+    var body: some View {
+        HStack(spacing: Design.Space.rowGap) {
+            SwiftUI.Text(detail.label)
+                .font(Design.Text.overlayDetail)
+                .foregroundStyle(Design.Palette.tertiaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: Design.Space.s)
+            SwiftUI.Text(detail.value)
+                .font(Design.Text.overlayDetailValue)
+                .foregroundStyle(Design.Palette.secondaryText)
+                .lineLimit(1)
+                .contentTransition(.numericText())
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(detail.label)
+        .accessibilityValue(detail.value)
     }
 }
 
