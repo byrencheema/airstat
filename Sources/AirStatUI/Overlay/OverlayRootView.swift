@@ -21,8 +21,10 @@ final class OverlayLayout {
 /// The overlay's own presentation: denser and quieter than the panel.
 ///
 /// The panel is a place you look *at*; the overlay is something you look *past*.
-/// So a module here is one header line, an optional bar, and at most a couple of
-/// supporting lines — never the panel's full expansion.
+/// So every module here is the same three things in the same order: a header line
+/// carrying the one reading that matters, a bar, and supporting rows indented under
+/// the title. Compact keeps one supporting row, expanded keeps them all. Nothing here
+/// gets the panel's charts, its two-column grids or its 20pt headline.
 struct OverlayRootView: View {
     let engine: MetricsEngine
     let settings: SettingsStore
@@ -80,30 +82,64 @@ private struct OverlayModuleView: View {
 
     @Environment(\.metricFormatter) private var formatter
 
+    /// Width of the header's glyph gutter. Everything below the header is inset past
+    /// it, so a module's detail sits under its own title rather than hanging out to
+    /// the left of it, and the icons are the only thing in the left margin.
+    static let iconColumn: CGFloat = 12
+    static let indent = iconColumn + Design.Space.s
+    /// Bar height, and the height reserved where a module has no bar to draw.
+    static let barHeight: CGFloat = 3
+
     var body: some View {
         VStack(alignment: .leading, spacing: Design.Space.xs) {
             switch readout {
             case .value(let readout):
                 OverlayHeaderRow(readout: readout)
-                if let fraction = readout.fraction {
-                    // The bar carries the metric's identity colour, whatever the value
-                    // is doing: the length is the reading, and a bar that also changed
-                    // hue was saying the same thing twice in a louder voice.
-                    CapacityBar(fraction: fraction, tint: readout.tint, height: 3)
-                }
-                if let secondary = readout.secondary {
-                    OverlaySecondaryRow(detail: secondary)
-                }
-                if !isCompact {
-                    ForEach(readout.details) { detail in
-                        ReadoutRow(detail.label, detail.value)
-                    }
+                barRow(readout)
+                ForEach(details(of: readout)) { detail in
+                    ReadoutRow(detail.label, detail.value)
+                        .padding(.leading, Self.indent)
                 }
             case .failure(let failure):
-                OverlayHeaderRow(readout: OverlayReadout(module: module, value: nil))
-                UnavailableNote(failure)
+                // One line, not four. The panel has room to explain why a sensor is
+                // missing; a HUD that spends three lines saying "no reading" is
+                // charging full price for a module that has nothing to report.
+                OverlayHeaderRow(readout: OverlayReadout(module: module, value: nil),
+                                 failure: failure)
             }
         }
+    }
+
+    /// Compact shows exactly one supporting line, expanded shows all of them.
+    ///
+    /// There used to be a third tier between the header and these rows, a dimmer
+    /// "secondary" line, and it inverted the thing it was meant to rank: the busiest
+    /// process and the machine's own chip name were set smaller and fainter than the
+    /// rows underneath them. Collapsing it into the top of this list is what makes a
+    /// compact module a fixed three lines tall for every metric.
+    private func details(of readout: OverlayReadout) -> [OverlayDetail] {
+        isCompact ? Array(readout.details.prefix(1)) : readout.details
+    }
+
+    /// The bar, or the space one would have taken.
+    ///
+    /// A rate has no maximum and so never gets a bar, but if the row simply vanished
+    /// then Network and Disk would be different heights and a column of modules would
+    /// step up and down as the user reordered them. Reserving the height costs three
+    /// points and keeps every module on the same rhythm.
+    @ViewBuilder
+    private func barRow(_ readout: OverlayReadout) -> some View {
+        Group {
+            if let fraction = readout.fraction {
+                // The bar carries the metric's identity colour, whatever the value
+                // is doing: the length is the reading, and a bar that also changed
+                // hue was saying the same thing twice in a louder voice.
+                CapacityBar(fraction: fraction, tint: readout.tint, height: Self.barHeight)
+            } else {
+                Color.clear.frame(height: Self.barHeight)
+            }
+        }
+        .padding(.leading, Self.indent)
     }
 
     // MARK: Snapshot → readout
@@ -141,9 +177,9 @@ private struct OverlayModuleView: View {
         engine.memory.map { memory in
             var readout = OverlayReadout(module: module, value: formatter.percent(memory.usedFraction))
             readout.fraction = memory.usedFraction
-            readout.secondary = OverlayDetail("used", "",
-                                              "\(formatter.memory(memory.usedBytes)) of \(formatter.memory(memory.totalBytes))")
             readout.details = [
+                OverlayDetail("used", "Used",
+                              "\(formatter.memory(memory.usedBytes)) of \(formatter.memory(memory.totalBytes))"),
                 OverlayDetail("pressure", "Pressure", formatter.percent(memory.pressureFraction)),
                 OverlayDetail("swap", "Swap", formatter.memory(memory.swapUsedBytes)),
             ]
@@ -171,14 +207,16 @@ private struct OverlayModuleView: View {
 
     private var networkReadout: MetricState<OverlayReadout> {
         engine.network.map { network in
-            // Arrows rather than "Down"/"Up" labels: at this width the glyph carries
-            // the meaning in a fraction of the space a word would need.
+            // The headline keeps its arrow because a bare rate does not say which
+            // direction it is going. The line below it is a labelled row like every
+            // other, rather than a bare "↑ 340 KB/s" floating against the right edge.
             var readout = OverlayReadout(
                 module: module,
                 value: "↓ " + formatter.networkRate(network.downloadBytesPerSecond))
-            readout.secondary = OverlayDetail("up", "",
-                                              "↑ " + formatter.networkRate(network.uploadBytesPerSecond))
-            var details = [OverlayDetail("type", "Link", network.connectionType.label)]
+            var details = [
+                OverlayDetail("up", "Upload", formatter.networkRate(network.uploadBytesPerSecond)),
+                OverlayDetail("type", "Link", network.connectionType.label),
+            ]
             if let ssid = network.wifi?.ssid {
                 details.append(OverlayDetail("ssid", "Network", ssid))
             }
@@ -194,13 +232,14 @@ private struct OverlayModuleView: View {
                 module: module,
                 value: root.map { formatter.percent($0.usedFraction) } ?? MetricFormatter.unavailable)
             readout.fraction = root?.usedFraction
-            if let root {
-                readout.secondary = OverlayDetail("free", "", "\(formatter.storage(root.freeBytes)) free")
-            }
             readout.details = [
                 OverlayDetail("read", "Read", formatter.diskRate(disk.readBytesPerSecond)),
                 OverlayDetail("write", "Write", formatter.diskRate(disk.writeBytesPerSecond)),
             ]
+            if let root {
+                readout.details.insert(
+                    OverlayDetail("free", "Free", formatter.storage(root.freeBytes)), at: 0)
+            }
             return readout
         }
     }
@@ -211,14 +250,16 @@ private struct OverlayModuleView: View {
                 // A desktop Mac has no battery to report; system draw is the honest
                 // substitute, and an em dash when even that is unavailable.
                 var readout = OverlayReadout(module: module, value: formatter.watts(power.systemWatts))
-                readout.secondary = OverlayDetail("source", "", power.isPluggedIn ? "AC power" : "")
+                readout.details = [
+                    OverlayDetail("source", "Source", power.isPluggedIn ? "AC power" : "Unknown"),
+                ]
                 return readout
             }
             var readout = OverlayReadout(module: module,
                                          value: formatter.percentValue(percentage))
             readout.fraction = percentage / 100
-            readout.secondary = OverlayDetail("state", "", batteryCaption(power))
             readout.details = [
+                OverlayDetail("state", "Status", batteryCaption(power)),
                 OverlayDetail("power", "Draw", formatter.watts(power.batteryWatts)),
             ]
             return readout
@@ -241,9 +282,9 @@ private struct OverlayModuleView: View {
         engine.thermal.map { thermal in
             var readout = OverlayReadout(module: module,
                                          value: formatter.temperature(thermal.cpuCelsius))
-            readout.secondary = OverlayDetail("pressure", "", thermal.pressure.label)
+            readout.details = [OverlayDetail("pressure", "Pressure", thermal.pressure.label)]
             if let fan = thermal.fans.first {
-                readout.details = [OverlayDetail("fan", fan.name, formatter.rpm(fan.currentRPM))]
+                readout.details.append(OverlayDetail("fan", fan.name, formatter.rpm(fan.currentRPM)))
             }
             return readout
         }
@@ -253,14 +294,13 @@ private struct OverlayModuleView: View {
         engine.processes.map { snapshot in
             var readout = OverlayReadout(module: module,
                                          value: formatter.count(snapshot.totalProcessCount))
-            let top = snapshot.processes.sorted { $0.cpuPercent > $1.cpuPercent }
-            if let first = top.first {
-                readout.secondary = OverlayDetail("top", first.name,
-                                                  formatter.unclampedPercent(first.cpuPercent))
-            }
-            readout.details = top.dropFirst().prefix(3).map {
-                OverlayDetail("pid-\($0.pid)", $0.name, formatter.unclampedPercent($0.cpuPercent))
-            }
+            // The busiest process is the first of these rather than a quieter line
+            // above them, so the loudest reading is not the faintest thing on screen.
+            readout.details = snapshot.processes
+                .sorted { $0.cpuPercent > $1.cpuPercent }
+                .prefix(4)
+                .map { OverlayDetail("pid-\($0.pid)", $0.name,
+                                     formatter.unclampedPercent($0.cpuPercent)) }
             return readout
         }
     }
@@ -268,8 +308,8 @@ private struct OverlayModuleView: View {
     private var systemReadout: MetricState<OverlayReadout> {
         engine.system.map { system in
             var readout = OverlayReadout(module: module, value: formatter.uptime(system.uptime))
-            readout.secondary = OverlayDetail("chip", "", system.chipName)
             readout.details = [
+                OverlayDetail("chip", "Chip", system.chipName),
                 OverlayDetail("os", system.osName, system.osVersion),
                 OverlayDetail("host", "Host", system.computerName),
             ]
@@ -282,60 +322,59 @@ private struct OverlayModuleView: View {
 
 private struct OverlayHeaderRow: View {
     let readout: OverlayReadout
+    /// Set when the metric has no reading. The reason takes the value's place instead
+    /// of adding a line under it.
+    var failure: MetricFailure?
 
     var body: some View {
         HStack(spacing: Design.Space.s) {
             Image(systemName: readout.symbol)
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 // The glyph belongs to the title beside it, not to the measurement, so
                 // it takes the title's colour. A metric's colour is for the things that
                 // *are* the metric — this module's bar, its charts, its number in the
                 // menu bar — and a coloured icon on a grey label was the app disagreeing
                 // with itself about which of the two the colour meant.
                 .foregroundStyle(Design.Palette.secondaryText)
-                .frame(width: 11)
+                .frame(width: OverlayModuleView.iconColumn)
             SwiftUI.Text(readout.title)
                 .font(Design.Text.sectionHeader)
                 .foregroundStyle(Design.Palette.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: Design.Space.m)
-            if let value = readout.value {
+            if let failure {
+                SwiftUI.Text(failure.shortLabel)
+                    .font(Design.Text.caption)
+                    .foregroundStyle(Design.Palette.tertiaryText)
+                    .lineLimit(1)
+            } else if let value = readout.value {
                 SwiftUI.Text(value)
-                    .font(Design.Text.value)
+                    .font(Design.Text.overlayValue)
                     .foregroundStyle(Design.Palette.primaryText)
                     .lineLimit(1)
                     .contentTransition(.numericText())
             }
         }
+        // The short label says there is no reading; the tooltip and VoiceOver still
+        // say why, which is the part that does not fit on the line.
+        .modifier(FailureHelp(failure: failure))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(readout.title)
-        .accessibilityValue(readout.value ?? "")
+        .accessibilityValue(failure.map { "Unavailable. \($0.message)" } ?? readout.value ?? "")
     }
 }
 
-/// The one supporting line a compact module is allowed. Deliberately quieter than
-/// `ReadoutRow`: it is context for the header, not a readout in its own right.
-private struct OverlaySecondaryRow: View {
-    let detail: OverlayDetail
+/// `.help` only where there is something to explain, so a healthy module does not
+/// carry an empty tooltip around.
+private struct FailureHelp: ViewModifier {
+    let failure: MetricFailure?
 
-    var body: some View {
-        HStack(spacing: Design.Space.s) {
-            if !detail.label.isEmpty {
-                SwiftUI.Text(detail.label)
-                    .font(Design.Text.micro)
-                    .foregroundStyle(Design.Palette.tertiaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: Design.Space.xs)
-            SwiftUI.Text(detail.value)
-                .font(Design.Text.micro)
-                .foregroundStyle(Design.Palette.tertiaryText)
-                .lineLimit(1)
+    func body(content: Content) -> some View {
+        if let failure {
+            content.help(failure.message)
+        } else {
+            content
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(detail.label)
-        .accessibilityValue(detail.value)
     }
 }
 
@@ -363,7 +402,6 @@ private struct OverlayReadout: Equatable, Sendable {
     /// `UnavailableNote` — never a zero standing in for a number we do not have.
     var value: String?
     var fraction: Double?
-    var secondary: OverlayDetail?
     var details: [OverlayDetail] = []
 
     init(module: PanelModule, value: String?) {

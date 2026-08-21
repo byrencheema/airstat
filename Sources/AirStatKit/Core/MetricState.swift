@@ -24,6 +24,20 @@ public enum MetricFailure: Sendable, Equatable, Hashable {
         }
     }
 
+    /// A two-word stand-in for `message`, for surfaces too narrow to wrap prose.
+    ///
+    /// The overlay shows this in the slot a reading would have occupied, so a metric
+    /// this Mac cannot provide costs one line instead of three. The full message is
+    /// still what the tooltip and VoiceOver read out.
+    public var shortLabel: String {
+        switch self {
+        case .unsupported: return "Unavailable"
+        case .failed: return "No reading"
+        case .denied: return "No access"
+        case .pending: return "Collecting…"
+        }
+    }
+
     public var isPermanent: Bool {
         if case .unsupported = self { return true }
         return false

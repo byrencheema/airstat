@@ -37,6 +37,20 @@ enum RenderCLI {
                     exit(2)
                 }
                 settings.theme.setAllColors(color)
+            // The overlay's shape is decided by two settings a reviewer cannot reach
+            // from the command line otherwise, and its worst case (nine modules,
+            // expanded) is exactly the one worth looking at.
+            case "--expanded":
+                settings.overlay.isCompact = false
+            case "--modules":
+                index += 1
+                let names = (arguments[safe: index] ?? "").split(separator: ",")
+                let parsed = names.compactMap { PanelModule(rawValue: String($0)) }
+                guard parsed.count == names.count, !parsed.isEmpty else {
+                    FileHandle.standardError.write(Data("--modules wants a comma-separated list of module names\n".utf8))
+                    exit(2)
+                }
+                settings.overlay.modules = parsed
             case "--scenario":
                 index += 1
                 if let scenario = OffscreenRenderer.Scenario(rawValue: arguments[safe: index] ?? "") {

@@ -48,6 +48,12 @@ public enum Design {
         public static let value = Font.system(size: 11, weight: .medium).monospacedDigit()
         /// The one large number at the top of a module.
         public static let headline = Font.system(size: 20, weight: .medium).monospacedDigit()
+        /// The overlay's headline. The panel's 20pt does not fit a 220pt window that
+        /// stacks nine of these, but a module whose reading is set at the same size as
+        /// its own detail rows has no headline at all: at 11pt a fan speed shouted as
+        /// loudly as the temperature above it. This is the smallest step that still
+        /// reads as the thing you look at first.
+        public static let overlayValue = Font.system(size: 14, weight: .medium).monospacedDigit()
         /// Secondary detail under a headline.
         public static let caption = Font.system(size: 10, weight: .regular)
         /// Smallest legible tier — axis ticks, units, footnotes.
