@@ -48,7 +48,11 @@ struct OverlayRootView: View {
             }
         }
         .padding(.horizontal, Design.Space.l)
-        .padding(.vertical, Design.Space.m)
+        .padding(.top, Design.Space.m)
+        // Deeper than the top on purpose: the options button lives in this strip, and
+        // a control that appears on hover must not land on top of the last row of a
+        // module the moment the pointer arrives.
+        .padding(.bottom, Design.Space.xl)
         .frame(width: width, alignment: .leading)
         .environment(\.metricFormatter, MetricFormatter(settings: settings.settings.general))
         .floatingSurface(in: shape)

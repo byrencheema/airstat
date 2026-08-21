@@ -484,6 +484,38 @@ public enum OverlayCorner: String, Sendable, Codable, CaseIterable, Equatable, H
     }
 }
 
+/// Which stack of windows the overlay belongs to.
+///
+/// This was a single "float above everything" switch, which could only ever say
+/// *how far up*. A readout pinned to the wallpaper is a different thing from a HUD:
+/// it is furniture the desktop happens to have, visible when nothing is covering it
+/// and never once in the way of anything.
+public enum OverlayDepth: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
+    /// Over every window, including a full-screen app.
+    case aboveEverything
+    /// A normal floating utility window: above the app you are using, under a
+    /// full-screen one.
+    case withWindows
+    /// Behind every window, sitting on the desktop picture.
+    case wallpaper
+
+    public var label: String {
+        switch self {
+        case .aboveEverything: return "Above Everything"
+        case .withWindows: return "With Other Windows"
+        case .wallpaper: return "On the Wallpaper"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .aboveEverything: return "Stays visible over full-screen apps."
+        case .withWindows: return "A normal floating window."
+        case .wallpaper: return "Behind every window, on the desktop picture."
+        }
+    }
+}
+
 public struct OverlaySettings: Sendable, Codable, Equatable {
     public var isEnabled: Bool
     public var modules: [PanelModule]
@@ -495,8 +527,8 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
     public var opacity: Double
     /// Let clicks pass through to whatever is beneath the overlay.
     public var isClickThrough: Bool
-    /// Keep above other windows, including full-screen spaces.
-    public var floatsAboveEverything: Bool
+    /// Which stack of windows the overlay belongs to.
+    public var depth: OverlayDepth
     public var showsOnAllSpaces: Bool
     /// Fade the overlay down until the pointer is near it.
     public var dimsWhenInactive: Bool
@@ -511,7 +543,7 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
                 width: Double = 220,
                 opacity: Double = 0.9,
                 isClickThrough: Bool = false,
-                floatsAboveEverything: Bool = true,
+                depth: OverlayDepth = .aboveEverything,
                 showsOnAllSpaces: Bool = true,
                 dimsWhenInactive: Bool = true,
                 inactiveOpacity: Double = 0.55,
@@ -524,7 +556,7 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
         self.width = width
         self.opacity = opacity
         self.isClickThrough = isClickThrough
-        self.floatsAboveEverything = floatsAboveEverything
+        self.depth = depth
         self.showsOnAllSpaces = showsOnAllSpaces
         self.dimsWhenInactive = dimsWhenInactive
         self.inactiveOpacity = inactiveOpacity
@@ -533,8 +565,14 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case isEnabled, modules, corner, originX, originY, width, opacity
-        case isClickThrough, floatsAboveEverything, showsOnAllSpaces
+        case isClickThrough, depth, showsOnAllSpaces
         case dimsWhenInactive, inactiveOpacity, isCompact
+    }
+
+    /// Keys this type still reads but no longer writes. Kept out of `CodingKeys` so
+    /// the synthesized encoder cannot resurrect one.
+    private enum LegacyKeys: String, CodingKey {
+        case floatsAboveEverything
     }
 
     public init(from decoder: Decoder) throws {
@@ -549,7 +587,16 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
         // Never let a stored opacity make the overlay invisible and unrecoverable.
         opacity = min(max(c.value(.opacity, or: 0.9), 0.2), 1)
         isClickThrough = c.value(.isClickThrough, or: false)
-        floatsAboveEverything = c.value(.floatsAboveEverything, or: true)
+        // `floatsAboveEverything` is what shipped through 1.2.1. A file written by
+        // that build has the bool and not the enum, and its two values are the first
+        // two cases, so it converts without asking the user anything.
+        if let stored = try? c.decodeIfPresent(OverlayDepth.self, forKey: .depth) {
+            depth = stored
+        } else {
+            let legacy = try? decoder.container(keyedBy: LegacyKeys.self)
+            let floated = (try? legacy?.decodeIfPresent(Bool.self, forKey: .floatsAboveEverything)) ?? nil
+            depth = (floated ?? true) ? .aboveEverything : .withWindows
+        }
         showsOnAllSpaces = c.value(.showsOnAllSpaces, or: true)
         dimsWhenInactive = c.value(.dimsWhenInactive, or: true)
         inactiveOpacity = min(max(c.value(.inactiveOpacity, or: 0.55), 0.15), 1)

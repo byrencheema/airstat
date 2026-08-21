@@ -17,6 +17,37 @@ struct SettingsDecodingTests {
         #expect(settings.panel.collapsedModules == PanelSettings.defaultCollapsed)
     }
 
+    /// A settings file written by 1.2.1 or earlier has `floatsAboveEverything` and no
+    /// `depth`, and the upgrade must not silently move anyone's overlay.
+    @Test("a pre-1.3 overlay layer converts from the old boolean")
+    func overlayDepthMigratesFromLegacyBool() throws {
+        #expect(try decode(#"{"overlay":{"floatsAboveEverything":true}}"#).overlay.depth
+                == .aboveEverything)
+        #expect(try decode(#"{"overlay":{"floatsAboveEverything":false}}"#).overlay.depth
+                == .withWindows)
+        #expect(try decode(#"{"overlay":{}}"#).overlay.depth == .aboveEverything)
+    }
+
+    /// The new key wins, so a file that somehow carries both is not dragged backwards
+    /// by the one nothing writes any more.
+    @Test("a stored layer beats the boolean it replaced")
+    func overlayDepthPrefersTheNewKey() throws {
+        let settings = try decode(#"{"overlay":{"depth":"wallpaper","floatsAboveEverything":true}}"#)
+        #expect(settings.overlay.depth == .wallpaper)
+    }
+
+    /// Round-tripping must not resurrect the retired key, or every save would write a
+    /// field the next version has to keep reading.
+    @Test("saving an overlay writes the layer and not the old boolean")
+    func overlayDepthRoundTrips() throws {
+        var settings = Settings()
+        settings.overlay.depth = .wallpaper
+        let data = try JSONEncoder().encode(settings)
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(!text.contains("floatsAboveEverything"))
+        #expect(try JSONDecoder().decode(Settings.self, from: data).overlay.depth == .wallpaper)
+    }
+
     /// Asserted by content, not against the constant the app reads. The defaults check
     /// above compares `collapsedModules` to `PanelSettings.defaultCollapsed`, which
     /// stays true no matter what that constant is changed to and so cannot notice a

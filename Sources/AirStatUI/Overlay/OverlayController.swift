@@ -151,9 +151,16 @@ public final class OverlayController: NSObject, NSWindowDelegate {
     /// Idempotent on purpose: it runs on every settings revision, and anything that
     /// wrote back to settings from here would loop.
     private func apply(_ overlay: OverlaySettings, to panel: OverlayPanel) {
-        // `.screenSaver` is the level that stays visible over a full-screen app;
-        // `.floating` alone disappears the moment anything goes full screen.
-        panel.level = overlay.floatsAboveEverything ? .screenSaver : .floating
+        // Order matters and is not optional. Setting `isFloatingPanel` assigns the
+        // window's level as a side effect — `.floating` when true, `.normal` when
+        // false — so a level written before it is thrown away. Measured: with the two
+        // lines the other way round every depth reported `kCGFloatingWindowLevel`.
+        panel.isFloatingPanel = overlay.depth != .wallpaper
+        panel.level = overlay.depth.windowLevel
+        // On the wallpaper the overlay is part of the desktop, and a desktop does not
+        // cast a shadow onto itself. Everywhere else the shadow is what lifts it off
+        // whatever it is covering.
+        panel.hasShadow = overlay.depth != .wallpaper
         panel.collectionBehavior = overlay.showsOnAllSpaces
             ? [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
             : [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
@@ -569,6 +576,24 @@ extension OverlayController: OverlayInteractionHandler {
     }
 }
 
+/// Which window stack each depth maps to.
+extension OverlayDepth {
+    var windowLevel: NSWindow.Level {
+        switch self {
+        // `.screenSaver` is the level that stays visible over a full-screen app;
+        // `.floating` alone disappears the moment anything goes full screen.
+        case .aboveEverything: return .screenSaver
+        case .withWindows: return .floating
+        // One step above the window the desktop picture is drawn in, which is the only
+        // place "on the wallpaper" can mean anything: at the picture's own level the
+        // ordering between the two is undefined and the overlay disappears behind it
+        // about half the time. Still below the desktop icons and every ordinary window.
+        case .wallpaper:
+            return NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
+        }
+    }
+}
+
 // MARK: - Context menu
 
 extension OverlayController {
@@ -595,6 +620,17 @@ extension OverlayController {
         dim.target = self
         dim.state = overlay.dimsWhenInactive ? .on : .off
 
+        let layer = NSMenu()
+        for depth in OverlayDepth.allCases {
+            let item = layer.addItem(withTitle: depth.label,
+                                     action: #selector(chooseDepth(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = depth.rawValue
+            item.state = overlay.depth == depth ? .on : .off
+            item.toolTip = depth.detail
+        }
+        menu.setSubmenu(layer, for: menu.addItem(withTitle: "Layer", action: nil, keyEquivalent: ""))
+
         let clickThrough = menu.addItem(withTitle: "Click-Through",
                                         action: #selector(toggleClickThrough), keyEquivalent: "")
         clickThrough.target = self
@@ -610,6 +646,12 @@ extension OverlayController {
         menu.addItem(withTitle: "Hide Overlay", action: #selector(hideOverlay), keyEquivalent: "")
             .target = self
         return menu
+    }
+
+    @objc private func chooseDepth(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let depth = OverlayDepth(rawValue: raw) else { return }
+        settings.update { $0.overlay.depth = depth }
     }
 
     @objc private func chooseCorner(_ sender: NSMenuItem) {
