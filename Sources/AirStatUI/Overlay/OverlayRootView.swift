@@ -147,13 +147,13 @@ private struct OverlayModuleView: View {
 
     /// The rest of a module, held open while its first sample is still being taken.
     ///
-    /// Every metric is `.pending` for the first tick after launch, and a pending
-    /// module drawn as its one honest line is a third of the height it is about to
-    /// become. Nine of them and the overlay opens at half size and then jumps, which
-    /// looks like a bug in the window rather than a metric that has not arrived. The
-    /// other failures get no reservation on purpose: an unsupported sensor is not
-    /// about to start working, and holding space for it would be holding space
-    /// forever.
+    /// Anything that has to difference two samples is `.pending` for the first tick
+    /// after launch, and a pending module drawn as its one honest line is a third of
+    /// the height it is about to become. A few of those and the overlay opens short
+    /// and then jumps, which looks like a bug in the window rather than a metric that
+    /// has not arrived. The other failures get no reservation on purpose: an
+    /// unsupported sensor is not about to start working, and holding space for it
+    /// would be holding space forever.
     ///
     /// Real rows rather than fixed heights, hidden rather than omitted, so the
     /// reservation cannot drift out of step with what replaces it.
