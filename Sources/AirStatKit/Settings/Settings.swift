@@ -594,8 +594,8 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
             depth = stored
         } else {
             let legacy = try? decoder.container(keyedBy: LegacyKeys.self)
-            let floated = (try? legacy?.decodeIfPresent(Bool.self, forKey: .floatsAboveEverything)) ?? nil
-            depth = (floated ?? true) ? .aboveEverything : .withWindows
+            let floated = legacy?.value(.floatsAboveEverything, or: true) ?? true
+            depth = floated ? .aboveEverything : .withWindows
         }
         showsOnAllSpaces = c.value(.showsOnAllSpaces, or: true)
         dimsWhenInactive = c.value(.dimsWhenInactive, or: true)

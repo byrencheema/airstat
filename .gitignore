@@ -27,3 +27,8 @@ AGENTS.md
 
 # Local working notes, not published
 docs/*.md
+
+# A one-off `npx vercel` leaves these behind. Nothing in this repo is a Node package.
+node_modules/
+package.json
+package-lock.json

@@ -147,13 +147,13 @@ private struct OverlayModuleView: View {
 
     /// The rest of a module, held open while its first sample is still being taken.
     ///
-    /// Anything that has to difference two samples is `.pending` for the first tick
-    /// after launch, and a pending module drawn as its one honest line is a third of
-    /// the height it is about to become. A few of those and the overlay opens short
-    /// and then jumps, which looks like a bug in the window rather than a metric that
-    /// has not arrived. The other failures get no reservation on purpose: an
-    /// unsupported sensor is not about to start working, and holding space for it
-    /// would be holding space forever.
+    /// Every module is `.pending` until its collector's first sample lands, and the
+    /// ones that difference two samples stay pending for a tick after that. A pending
+    /// module drawn as its one honest line is a fraction of the height it is about to
+    /// become; a few of those and the overlay opens short and then jumps, which looks
+    /// like a bug in the window rather than a metric that has not arrived. The other
+    /// failures get no reservation on purpose: an unsupported sensor is not about to
+    /// start working, and holding space for it would be holding space forever.
     ///
     /// Real rows rather than fixed heights, hidden rather than omitted, so the
     /// reservation cannot drift out of step with what replaces it.
@@ -162,10 +162,33 @@ private struct OverlayModuleView: View {
         barRow(fraction: nil, tint: .clear)
         // A real string, not an empty one: an empty `Text` lays out at zero height and
         // would reserve nothing at all.
-        OverlayDetailRow(detail: OverlayDetail("pending", "\u{2014}", "\u{2014}"))
-            .padding(.leading, Self.indent)
-            .hidden()
-            .accessibilityHidden(true)
+        ForEach(Array(0..<reservedRowCount), id: \.self) { _ in
+            OverlayDetailRow(detail: OverlayDetail("pending", "\u{2014}", "\u{2014}"))
+                .padding(.leading, Self.indent)
+                .hidden()
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// How many supporting rows to hold open for a module that has not reported yet.
+    ///
+    /// Compact keeps one line whatever the metric is, so one is all it can need.
+    /// Expanded is the case the single reserved row used to get wrong: a module that
+    /// arrives with four rows still jumped three lines, which is the jump the
+    /// reservation exists to prevent. The counts below are each module's guaranteed
+    /// rows — the ones that do not depend on the reading — so the reservation is never
+    /// taller than what replaces it.
+    private var reservedRowCount: Int {
+        isCompact ? 1 : Self.guaranteedDetailRows(module)
+    }
+
+    static func guaranteedDetailRows(_ module: PanelModule) -> Int {
+        switch module {
+        case .cpu, .memory, .system: return 3
+        case .processes: return 4
+        case .network, .disk: return 2
+        case .gpu, .battery, .thermal: return 1
+        }
     }
 
     // MARK: Snapshot → readout
@@ -368,15 +391,7 @@ private struct OverlayHeaderRow: View {
                 .foregroundStyle(Design.Palette.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: Design.Space.m)
-            // Holds the row at the height of a reading whatever it is currently
-            // showing. Without it a module whose value has not arrived, or never will,
-            // has a header three points shorter than its neighbours', because the
-            // reason it prints is caption-sized and a reading is not.
-            SwiftUI.Text(verbatim: "0")
-                .font(Design.Text.overlayValue)
-                .hidden()
-                .frame(width: 0)
-                .accessibilityHidden(true)
+            LineStrut(font: Design.Text.overlayValue)
             if let failure {
                 SwiftUI.Text(failure.shortLabel)
                     .font(Design.Text.caption)
@@ -399,6 +414,24 @@ private struct OverlayHeaderRow: View {
     }
 }
 
+/// Holds a row at the height of one line of `font`, whatever the row is showing.
+///
+/// Without it a module whose value has not arrived, or never will, has a header a few
+/// points shorter than its neighbours', because the reason it prints is caption-sized
+/// and a reading is not. A zero-width hidden glyph tracks the font's own metrics, so
+/// changing the type scale cannot leave a hardcoded height behind.
+private struct LineStrut: View {
+    let font: Font
+
+    var body: some View {
+        SwiftUI.Text(verbatim: "0")
+            .font(font)
+            .hidden()
+            .frame(width: 0)
+            .accessibilityHidden(true)
+    }
+}
+
 /// A supporting line under a module's header.
 ///
 /// Not `ReadoutRow`. The panel's row sets its value at full label colour, which is
@@ -411,7 +444,7 @@ private struct OverlayDetailRow: View {
     var body: some View {
         HStack(spacing: Design.Space.rowGap) {
             SwiftUI.Text(detail.label)
-                .font(Design.Text.overlayDetail)
+                .font(Design.Text.caption)
                 .foregroundStyle(Design.Palette.tertiaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)

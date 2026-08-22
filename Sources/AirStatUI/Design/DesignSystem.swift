@@ -54,12 +54,12 @@ public enum Design {
         /// loudly as the temperature above it. This is the smallest step that still
         /// reads as the thing you look at first.
         public static let overlayValue = Font.system(size: 14, weight: .medium).monospacedDigit()
-        /// The overlay's supporting rows. The panel sets its detail at the same size as
-        /// its labels because a 20pt headline is already three steps above them; at 14
-        /// there is not that much room, so the rows below drop a size as well as a
-        /// weight. What the user reads at a glance is the header, and these are the
-        /// lines they read only if the header made them want to.
-        public static let overlayDetail = Font.system(size: 10, weight: .regular)
+        /// The value on an overlay supporting row. Its label is `caption`: the panel
+        /// sets its detail at the same size as its labels because a 20pt headline is
+        /// already three steps above them, and at 14 there is not that much room, so
+        /// the rows below drop a size as well as a weight. What the user reads at a
+        /// glance is the header, and these are the lines they read only if the header
+        /// made them want to.
         public static let overlayDetailValue = Font.system(size: 10, weight: .medium).monospacedDigit()
         /// Secondary detail under a headline.
         public static let caption = Font.system(size: 10, weight: .regular)
