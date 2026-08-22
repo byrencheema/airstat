@@ -132,7 +132,12 @@ final class AppCoordinator {
         panelAnchor = nil
     }
 
-    private func showSettings() {
+    /// Bring Settings up, from wherever the request came from.
+    ///
+    /// Also the answer to a second launch: the app has no dock icon and no window of
+    /// its own, so opening it from Spotlight or the Finder while it is already running
+    /// used to do nothing at all, which is indistinguishable from the app being broken.
+    func showSettings() {
         panel.hide()
         settingsWindow.show()
     }

@@ -211,9 +211,12 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // the modules nearest the bottom become unreachable.
         let available = anchor.map { ($0.minY - gap) - (visible.minY + margin) }
             ?? (visible.height - margin * 2)
-        let size = NSSize(width: fitting.width,
-                          height: min(fitting.height, max(available, 160)))
-        if window.frame.size != size { window.setContentSize(size) }
+        // Rounded, not just the origin below. `y` is derived from the height, so a
+        // fractional height put the panel's *top* edge on a fraction of a point: the
+        // edge pinned under the status item slid a third of a point every time a text
+        // metric changed, which is the low-level shimmer under everything else here.
+        let size = NSSize(width: fitting.width.rounded(),
+                          height: min(fitting.height, max(available, 160)).rounded())
 
         var x: CGFloat
         var y: CGFloat
@@ -233,7 +236,23 @@ public final class PanelController: NSObject, NSWindowDelegate {
         x = min(max(x, visible.minX + margin), max(visible.maxX - size.width - margin, visible.minX + margin))
         y = min(max(y, visible.minY + margin), max(visible.maxY - size.height - margin, visible.minY + margin))
 
-        window.setFrameOrigin(NSPoint(x: x.rounded(), y: y.rounded()))
+        // One frame mutation, not two.
+        //
+        // This used to be `setContentSize` followed by `setFrameOrigin`. `setContentSize`
+        // keeps the window's bottom-left origin and moves its top edge, which for a panel
+        // pinned under the status item is the wrong edge entirely: the window grew upwards
+        // into the menu bar and the origin call then dragged it back down. Two mutations
+        // also meant two `windowDidResize` notifications, and that delegate re-enters this
+        // method — `isPositioning` only guards the synchronous case, so the asynchronous
+        // one came back a beat later and resized again. That second, late resize is what
+        // read as a jitter.
+        //
+        // Setting the whole frame at once makes an unchanged placement a genuine no-op,
+        // which is what stops the re-entrant pass from moving anything.
+        let frame = NSRect(x: x.rounded(), y: y.rounded(),
+                           width: size.width, height: size.height)
+        guard frame != window.frame else { return }
+        window.setFrame(frame, display: true)
     }
 
     private static func screen(containing rect: NSRect) -> NSScreen? {

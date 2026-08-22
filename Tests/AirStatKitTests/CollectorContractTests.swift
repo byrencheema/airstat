@@ -51,6 +51,23 @@ struct CollectorContractTests {
         }
     }
 
+    /// A collector that needs two samples to difference against has nothing wrong with
+    /// it on the first one. The distinction is load-bearing in the UI: a pending module
+    /// holds its full height open because a reading is coming, and a failed one
+    /// collapses to a line. Reporting the baseline as a failure made the overlay open a
+    /// row short and jump a tick later.
+    @Test("a collector still taking its baseline is pending, not failed")
+    func baselineSamplesArePending() {
+        let first = SampleContext(elapsed: 0, isFirstSample: true, activity: .panel)
+
+        if case .failure(let failure) = CPUCollector().collect(context: first) {
+            #expect(failure == .pending, "CPU reported \(failure) while taking its baseline")
+        }
+        if case .failure(let failure) = ProcessCollector().collect(context: first) {
+            #expect(failure == .pending, "processes reported \(failure) while taking its baseline")
+        }
+    }
+
     @Test("a zero elapsed time never produces an infinite or NaN rate")
     func zeroElapsedIsSafe() {
         // Timer coalescing and a manual refresh can genuinely deliver two samples in

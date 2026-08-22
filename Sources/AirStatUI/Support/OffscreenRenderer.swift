@@ -188,9 +188,17 @@ public enum OffscreenRenderer {
     /// than a sharper render, and the 1x-versus-2x comparison the flag exists for
     /// compared an image against an interpolation of itself.
     private static func scaledRep(size: NSSize, scale: CGFloat) -> NSBitmapImageRep? {
+        // `Int(_:)` traps on an infinite or NaN Double rather than saturating, so a
+        // pixel count that is not a real number has to be caught before the cast. The
+        // CLI validates its own `--scale`; this is the backstop for every other caller.
+        let pixels = NSSize(width: (size.width * scale).rounded(),
+                            height: (size.height * scale).rounded())
+        guard pixels.width.isFinite, pixels.height.isFinite,
+              pixels.width >= 1, pixels.height >= 1,
+              pixels.width <= 32_768, pixels.height <= 32_768 else { return nil }
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
-                                   pixelsWide: Int((size.width * scale).rounded()),
-                                   pixelsHigh: Int((size.height * scale).rounded()),
+                                   pixelsWide: Int(pixels.width),
+                                   pixelsHigh: Int(pixels.height),
                                    bitsPerSample: 8,
                                    samplesPerPixel: 4,
                                    hasAlpha: true,

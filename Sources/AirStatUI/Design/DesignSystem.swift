@@ -48,6 +48,19 @@ public enum Design {
         public static let value = Font.system(size: 11, weight: .medium).monospacedDigit()
         /// The one large number at the top of a module.
         public static let headline = Font.system(size: 20, weight: .medium).monospacedDigit()
+        /// The overlay's headline. The panel's 20pt does not fit a 220pt window that
+        /// stacks nine of these, but a module whose reading is set at the same size as
+        /// its own detail rows has no headline at all: at 11pt a fan speed shouted as
+        /// loudly as the temperature above it. This is the smallest step that still
+        /// reads as the thing you look at first.
+        public static let overlayValue = Font.system(size: 14, weight: .medium).monospacedDigit()
+        /// The value on an overlay supporting row. Its label is `caption`: the panel
+        /// sets its detail at the same size as its labels because a 20pt headline is
+        /// already three steps above them, and at 14 there is not that much room, so
+        /// the rows below drop a size as well as a weight. What the user reads at a
+        /// glance is the header, and these are the lines they read only if the header
+        /// made them want to.
+        public static let overlayDetailValue = Font.system(size: 10, weight: .medium).monospacedDigit()
         /// Secondary detail under a headline.
         public static let caption = Font.system(size: 10, weight: .regular)
         /// Smallest legible tier — axis ticks, units, footnotes.
@@ -138,7 +151,16 @@ public enum Design {
         /// Numeric readouts crossfading to a new value.
         public static let value = Animation.easeOut(duration: 0.18)
         /// Disclosure, module expand/collapse.
-        public static let disclosure = Animation.spring(response: 0.32, dampingFraction: 0.86)
+        ///
+        /// Critically damped on purpose. The panel's window is sized to its content, so
+        /// the height this animation produces is the window's height, and a spring that
+        /// overshoots makes the window grow past its resting size and come back. On a
+        /// panel pinned under the status item that reversal is the bounce that reads as
+        /// jitter. At a damping fraction of 1 the height only ever moves one way.
+        public static let disclosure = Animation.spring(response: 0.32, dampingFraction: 1)
+        /// How long `disclosure` takes to settle, for the non-SwiftUI side of a
+        /// height change to line up with.
+        public static let disclosureDuration: Duration = .milliseconds(340)
         /// Panel present/dismiss.
         public static let present = Animation.easeOut(duration: 0.14)
         /// Hover highlight.

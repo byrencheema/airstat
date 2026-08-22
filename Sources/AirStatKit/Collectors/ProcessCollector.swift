@@ -142,8 +142,10 @@ public final class ProcessCollector: MetricSource {
             baselines = baselines.filter { $0.value.seenAt == current }
         }
 
+        // See `CPUCollector`: a first sample with nothing to difference against is
+        // pending, not failed.
         guard !rebaselining else {
-            return .failure(.failed("establishing baseline"))
+            return .pending
         }
 
         candidates.sort { $0.cpuPercent > $1.cpuPercent }

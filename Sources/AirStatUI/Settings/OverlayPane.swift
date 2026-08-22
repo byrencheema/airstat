@@ -90,11 +90,19 @@ struct OverlayPane: View {
             }
 
             Section {
+                Picker("Layer", selection: settings.binding(\.overlay.depth)) {
+                    ForEach(OverlayDepth.allCases, id: \.self) { depth in
+                        Text(depth.label).tag(depth)
+                    }
+                }
                 Toggle("Click through the overlay", isOn: settings.binding(\.overlay.isClickThrough))
-                Toggle("Float above everything", isOn: settings.binding(\.overlay.floatsAboveEverything))
                 Toggle("Show on all spaces", isOn: settings.binding(\.overlay.showsOnAllSpaces))
             } header: {
                 Text("Behaviour")
+            } footer: {
+                Text(overlay.depth.detail)
+                    .font(.callout)
+                    .foregroundStyle(Design.Palette.secondaryText)
             }
 
             Section {

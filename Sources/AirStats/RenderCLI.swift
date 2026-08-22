@@ -19,12 +19,22 @@ enum RenderCLI {
             switch arguments[index] {
             case "--out":
                 index += 1
-                if index < arguments.count {
-                    outputDirectory = URL(fileURLWithPath: arguments[index], isDirectory: true)
+                guard let path = arguments[safe: index], !path.isEmpty else {
+                    FileHandle.standardError.write(Data("--out wants a directory\n".utf8))
+                    exit(2)
                 }
+                outputDirectory = URL(fileURLWithPath: path, isDirectory: true)
             case "--scale":
                 index += 1
-                if let value = Double(arguments[safe: index] ?? "") { scales.append(CGFloat(value)) }
+                // Bounded, not just parsed. `Double("1e400")` is `+infinity`, and the
+                // pixel count it produces is an `Int(_:)` conversion that traps rather
+                // than saturating — a typo in a flag should not be a crash.
+                guard let value = Double(arguments[safe: index] ?? ""),
+                      value.isFinite, value > 0, value <= 8 else {
+                    FileHandle.standardError.write(Data("--scale wants a number in 0...8\n".utf8))
+                    exit(2)
+                }
+                scales.append(CGFloat(value))
             case "--light": appearances.append(false)
             case "--dark": appearances.append(true)
             // The colour a user picks is already carried on Request.settings and read
@@ -37,11 +47,29 @@ enum RenderCLI {
                     exit(2)
                 }
                 settings.theme.setAllColors(color)
+            // The overlay's shape is decided by two settings a reviewer cannot reach
+            // from the command line otherwise, and its worst case (nine modules,
+            // expanded) is exactly the one worth looking at.
+            case "--expanded":
+                settings.overlay.isCompact = false
+            case "--modules":
+                index += 1
+                let names = (arguments[safe: index] ?? "").split(separator: ",")
+                let parsed = names.compactMap { PanelModule(rawValue: String($0)) }
+                guard parsed.count == names.count, !parsed.isEmpty else {
+                    FileHandle.standardError.write(Data("--modules wants a comma-separated list of module names\n".utf8))
+                    exit(2)
+                }
+                var seen: Set<PanelModule> = []
+                settings.overlay.modules = parsed.filter { seen.insert($0).inserted }
             case "--scenario":
                 index += 1
-                if let scenario = OffscreenRenderer.Scenario(rawValue: arguments[safe: index] ?? "") {
-                    scenarios.append(scenario)
+                guard let scenario = OffscreenRenderer.Scenario(rawValue: arguments[safe: index] ?? "") else {
+                    let known = OffscreenRenderer.Scenario.allCases.map(\.rawValue).joined(separator: ", ")
+                    FileHandle.standardError.write(Data("--scenario wants one of: \(known)\n".utf8))
+                    exit(2)
                 }
+                scenarios.append(scenario)
             default:
                 if let surface = OffscreenRenderer.Surface(rawValue: arguments[index]) {
                     surfaces.append(surface)

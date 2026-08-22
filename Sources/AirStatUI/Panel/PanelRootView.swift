@@ -34,7 +34,7 @@ public struct PanelRootView: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(modules.enumerated()), id: \.element) { index, module in
-                        if index > 0, separatorNeeded(before: index) { PanelSeparator() }
+                        if index > 0 { PanelSeparator(isVisible: separatorNeeded(before: index)) }
                         PanelModuleView(module: module, engine: engine, settings: settings)
                     }
                 }
@@ -84,10 +84,20 @@ public struct PanelRootView: View {
 
 /// Inset rule between modules. macOS insets its separators to the content margin so
 /// they read as dividing the text, not as slicing the window in half.
+///
+/// A rule that is not wanted turns clear rather than disappearing. It reads identically
+/// — a transparent hairline is nothing — but it costs the layout the same one point
+/// whatever the modules around it are doing. Inserting and removing the view instead
+/// meant a single toggle restructured the stack twice, because `separatorNeeded` looks
+/// at both of a rule's neighbours: expanding a module flipped the rule above it and the
+/// rule below it. Only the first module escaped, its leading rule being suppressed by
+/// the `index > 0` test, which is exactly why every module except CPU jumped harder.
 struct PanelSeparator: View {
+    var isVisible = true
+
     var body: some View {
         Rectangle()
-            .fill(Design.Palette.separator)
+            .fill(isVisible ? Design.Palette.separator : .clear)
             .frame(height: Design.Space.hairline)
             .padding(.horizontal, Design.Space.panelInset)
             .accessibilityHidden(true)

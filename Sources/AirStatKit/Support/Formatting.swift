@@ -202,8 +202,7 @@ public struct MetricFormatter: Sendable {
 
     /// Battery time remaining and similar. "2:45" style, or "45m" when under an hour.
     public func duration(_ seconds: TimeInterval?) -> String {
-        guard let seconds, seconds.isFinite, seconds > 0 else { return Self.unavailable }
-        let total = Int(seconds.rounded())
+        guard let seconds, seconds > 0, let total = Self.whole(seconds) else { return Self.unavailable }
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         if hours > 0 { return "\(hours):\(String(format: "%02d", minutes))" }
@@ -212,8 +211,7 @@ public struct MetricFormatter: Sendable {
 
     /// Uptime, in the "12d 4h" register Apple uses in About This Mac.
     public func uptime(_ seconds: TimeInterval) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return Self.unavailable }
-        let total = Int(seconds)
+        guard seconds >= 0, let total = Self.whole(seconds.rounded(.down)) else { return Self.unavailable }
         let days = total / 86400
         let hours = (total % 86400) / 3600
         let minutes = (total % 3600) / 60
@@ -223,8 +221,7 @@ public struct MetricFormatter: Sendable {
     }
 
     public func compactUptime(_ seconds: TimeInterval) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return Self.unavailable }
-        let total = Int(seconds)
+        guard seconds >= 0, let total = Self.whole(seconds.rounded(.down)) else { return Self.unavailable }
         let days = total / 86400
         let hours = (total % 86400) / 3600
         let minutes = (total % 3600) / 60
@@ -236,8 +233,8 @@ public struct MetricFormatter: Sendable {
     // MARK: Misc
 
     public func rpm(_ value: Double?) -> String {
-        guard let value, value.isFinite, value >= 0 else { return Self.unavailable }
-        return "\(Int(value.rounded())) RPM"
+        guard let value, value >= 0, let whole = Self.whole(value) else { return Self.unavailable }
+        return "\(whole) RPM"
     }
 
     public func watts(_ value: Double?, decimals: Int = 1) -> String {
@@ -260,11 +257,25 @@ public struct MetricFormatter: Sendable {
     /// Fixed-decimal rendering that always uses the locale's decimal separator but
     /// never groups — grouping separators in a 3-character menu bar readout are noise.
     public func fixed(_ value: Double, decimals: Int) -> String {
-        guard value.isFinite else { return Self.unavailable }
-        if decimals == 0 { return String(Int(value.rounded())) }
+        // The bound applies at every decimal count, not just zero. `String(format:)`
+        // does not trap on 1.8e308, it renders all 309 digits of it, and a readout
+        // three hundred characters wide is its own kind of broken.
+        guard let whole = Self.whole(value) else { return Self.unavailable }
+        if decimals == 0 { return String(whole) }
         let rounded = String(format: "%.\(decimals)f", value)
         let separator = Locale.current.decimalSeparator ?? "."
         return separator == "." ? rounded : rounded.replacingOccurrences(of: ".", with: separator)
+    }
+
+    /// `Int(_:)` traps rather than saturating, and it traps on plenty of *finite*
+    /// doubles: anything past 9.2 * 10^18 is out of range. A sensor that misreads —
+    /// an SMC fan channel returning garbage, a boot time from a machine whose clock
+    /// jumped — hands us exactly such a number, and a readout is not worth a crash.
+    /// Nothing this large is a real reading, so it formats as "no reading" instead.
+    private static func whole(_ value: Double) -> Int? {
+        let rounded = value.rounded()
+        guard rounded.isFinite, rounded.magnitude < 9.2e18 else { return nil }
+        return Int(rounded)
     }
 
     private static let integerFormatter: NumberFormatter = {
