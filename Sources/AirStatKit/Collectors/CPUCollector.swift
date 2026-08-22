@@ -91,9 +91,14 @@ public final class CPUCollector: MetricSource {
         // These counters are cumulative since boot, so the first sample after launch,
         // after a wake, or after a core-count change can only establish a baseline —
         // differencing against zero would report "average usage since boot" instead.
+        // `.pending`, not `.failed`: nothing has gone wrong, the reading simply does
+        // not exist yet and will on the next tick. The UI treats the two differently
+        // — a pending module holds its full height open, because it is about to be
+        // filled in, and a failed one collapses — so calling this a failure made the
+        // overlay open a row short and then jump.
         guard hasBaseline, !context.isFirstSample, !context.didWakeFromSleep,
               previousTicks.count == wanted else {
-            return .failure(.failed("establishing baseline"))
+            return .pending
         }
 
         var perCore: [CPULoad] = []
