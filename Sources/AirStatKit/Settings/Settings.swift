@@ -578,7 +578,13 @@ public struct OverlaySettings: Sendable, Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = c.value(.isEnabled, or: false)
+        // Deduplicated, because the overlay identifies its rows by the module itself.
+        // A hand-edited file listing "cpu" twice gives SwiftUI two views with the same
+        // identity in one `ForEach`, which it resolves by animating them into each
+        // other and dropping one at random.
+        var seen: Set<PanelModule> = []
         let decodedModules = c.value(.modules, or: [PanelModule.cpu, .memory, .network])
+            .filter { seen.insert($0).inserted }
         modules = decodedModules.isEmpty ? [.cpu, .memory, .network] : decodedModules
         corner = c.value(.corner, or: OverlayCorner.topRight)
         originX = try? c.decodeIfPresent(Double.self, forKey: .originX)

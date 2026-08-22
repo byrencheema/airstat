@@ -53,6 +53,12 @@ public final class OverlayController: NSObject, NSWindowDelegate {
 
     public var isVisible: Bool { panel?.isVisible ?? false }
 
+    /// The stack the window actually ended up in, as opposed to the one that was
+    /// asked for. Worth being able to read back: `isFloatingPanel` assigns the level
+    /// as a side effect, so a level set in the wrong order is silently discarded and
+    /// nothing about the window looks wrong until something covers it.
+    public var windowLevel: NSWindow.Level? { panel?.level }
+
     // MARK: Presentation
 
     /// Bring the overlay into line with the current settings, creating or tearing
