@@ -213,7 +213,6 @@ public final class PanelController: NSObject, NSWindowDelegate {
             ?? (visible.height - margin * 2)
         let size = NSSize(width: fitting.width,
                           height: min(fitting.height, max(available, 160)))
-        if window.frame.size != size { window.setContentSize(size) }
 
         var x: CGFloat
         var y: CGFloat
@@ -233,7 +232,23 @@ public final class PanelController: NSObject, NSWindowDelegate {
         x = min(max(x, visible.minX + margin), max(visible.maxX - size.width - margin, visible.minX + margin))
         y = min(max(y, visible.minY + margin), max(visible.maxY - size.height - margin, visible.minY + margin))
 
-        window.setFrameOrigin(NSPoint(x: x.rounded(), y: y.rounded()))
+        // One frame mutation, not two.
+        //
+        // This used to be `setContentSize` followed by `setFrameOrigin`. `setContentSize`
+        // keeps the window's bottom-left origin and moves its top edge, which for a panel
+        // pinned under the status item is the wrong edge entirely: the window grew upwards
+        // into the menu bar and the origin call then dragged it back down. Two mutations
+        // also meant two `windowDidResize` notifications, and that delegate re-enters this
+        // method — `isPositioning` only guards the synchronous case, so the asynchronous
+        // one came back a beat later and resized again. That second, late resize is what
+        // read as a jitter.
+        //
+        // Setting the whole frame at once makes an unchanged placement a genuine no-op,
+        // which is what stops the re-entrant pass from moving anything.
+        let frame = NSRect(x: x.rounded(), y: y.rounded(),
+                           width: size.width, height: size.height)
+        guard frame != window.frame else { return }
+        window.setFrame(frame, display: true)
     }
 
     private static func screen(containing rect: NSRect) -> NSScreen? {
