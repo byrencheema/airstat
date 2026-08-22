@@ -97,7 +97,7 @@ private struct OverlayModuleView: View {
             switch readout {
             case .value(let readout):
                 OverlayHeaderRow(readout: readout)
-                barRow(readout)
+                barRow(fraction: readout.fraction, tint: readout.tint)
                 ForEach(details(of: readout)) { detail in
                     OverlayDetailRow(detail: detail)
                         .padding(.leading, Self.indent)
@@ -108,6 +108,7 @@ private struct OverlayModuleView: View {
                 // charging full price for a module that has nothing to report.
                 OverlayHeaderRow(readout: OverlayReadout(module: module, value: nil),
                                  failure: failure)
+                if failure == .pending { pendingReservation }
             }
         }
     }
@@ -130,18 +131,41 @@ private struct OverlayModuleView: View {
     /// step up and down as the user reordered them. Reserving the height costs three
     /// points and keeps every module on the same rhythm.
     @ViewBuilder
-    private func barRow(_ readout: OverlayReadout) -> some View {
+    private func barRow(fraction: Double?, tint: Color) -> some View {
         Group {
-            if let fraction = readout.fraction {
+            if let fraction {
                 // The bar carries the metric's identity colour, whatever the value
                 // is doing: the length is the reading, and a bar that also changed
                 // hue was saying the same thing twice in a louder voice.
-                CapacityBar(fraction: fraction, tint: readout.tint, height: Self.barHeight)
+                CapacityBar(fraction: fraction, tint: tint, height: Self.barHeight)
             } else {
                 Color.clear.frame(height: Self.barHeight)
             }
         }
         .padding(.leading, Self.indent)
+    }
+
+    /// The rest of a module, held open while its first sample is still being taken.
+    ///
+    /// Every metric is `.pending` for the first tick after launch, and a pending
+    /// module drawn as its one honest line is a third of the height it is about to
+    /// become. Nine of them and the overlay opens at half size and then jumps, which
+    /// looks like a bug in the window rather than a metric that has not arrived. The
+    /// other failures get no reservation on purpose: an unsupported sensor is not
+    /// about to start working, and holding space for it would be holding space
+    /// forever.
+    ///
+    /// Real rows rather than fixed heights, hidden rather than omitted, so the
+    /// reservation cannot drift out of step with what replaces it.
+    @ViewBuilder
+    private var pendingReservation: some View {
+        barRow(fraction: nil, tint: .clear)
+        // A real string, not an empty one: an empty `Text` lays out at zero height and
+        // would reserve nothing at all.
+        OverlayDetailRow(detail: OverlayDetail("pending", "\u{2014}", "\u{2014}"))
+            .padding(.leading, Self.indent)
+            .hidden()
+            .accessibilityHidden(true)
     }
 
     // MARK: Snapshot → readout
@@ -344,6 +368,15 @@ private struct OverlayHeaderRow: View {
                 .foregroundStyle(Design.Palette.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: Design.Space.m)
+            // Holds the row at the height of a reading whatever it is currently
+            // showing. Without it a module whose value has not arrived, or never will,
+            // has a header three points shorter than its neighbours', because the
+            // reason it prints is caption-sized and a reading is not.
+            SwiftUI.Text(verbatim: "0")
+                .font(Design.Text.overlayValue)
+                .hidden()
+                .frame(width: 0)
+                .accessibilityHidden(true)
             if let failure {
                 SwiftUI.Text(failure.shortLabel)
                     .font(Design.Text.caption)
