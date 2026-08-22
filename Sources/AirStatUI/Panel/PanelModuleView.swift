@@ -247,6 +247,10 @@ struct PanelModuleView: View {
     }
 
     private func toggleCollapsed() {
+        // The window follows this animation's height frame by frame. A sample landing
+        // mid-flight changes the target height for reasons that have nothing to do
+        // with the disclosure, so the data is held still until the module has settled.
+        engine.holdUpdates(for: Design.Motion.disclosureDuration)
         withAnimation(Design.Motion.respectingAccessibility(Design.Motion.disclosure)) {
             settings.update { s in
                 if s.panel.collapsedModules.contains(module) {
